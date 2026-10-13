@@ -80,7 +80,7 @@ Codex 负责看图、判断、写提示词、标注裁片与关节并复查；�
 
 `character-assets` 与 limbs 的生成计划和候选均标记为 `requires_reviewed_layout=true`，不能使用按固定格位拆分的旧 `apply-part-sheet`。Codex 必须看真实部件，检查掌、鞋、关节、方向和边界后，使用下述 `apply-part-layout` 给出裁片及实际 pins。生成提示词要求的格数不保证实图一定遵循；不合格布局不能靠默认格位强行应用。
 
-亿创生成使用平台凭据及 GPT Image 2.5 Flare；参考图以 HTTPS URL 通过 input_images 传入，不支持内嵌 PNG/Base64。供应商拒绝／任务失败需如实报告，不换别的生图供应商，也不以文字描述重抽冒充参考编辑。
+生成使用平台当前配置的 provider/model。亿创使用 HTTPS input_images；OpenAI Images 兼容 API 使用 multipart PNG 上传，并支持 url/b64_json 返回结果。只在 HTTPS 传输模式下要求发布参考图。供应商拒绝／任务失败如实报告，不自动切换服务或以文字描述重抽冒充参考编辑。
 
 ## 按原因处理失败，最多一次质量修订
 
@@ -99,6 +99,8 @@ Codex 负责看图、判断、写提示词、标注裁片与关节并复查；�
 再次补做仍不合格则停止新生图，保留可用成果并说明限制。用户后来明确发起新的修改需求属于新的请求，仍需遵守该需求预算及相同的拒绝／未知提交处理规则。提示词优化与接口模拟检查不能代替新的实图验收，也不保证模型永远接受或准确遵循描述。
 
 ## 平台自动准备参考图链接（1.7.1）
+
+以下为 `reference_transport=https-url` 的流程。当前若为 `multipart-file`，平台生成内部参考句柄并直接上传文件，不公开图片、不使用这些链接发布步骤。内部句柄不是可供浏览器或外部服务访问的 URL，不要手工改写。
 
 使用者把图片和动作要求发给 Codex，Codex 调用 `spine_submit` 即可。服务器接收图片后会正规化尺寸和像素；后台 Codex 按准备策略检查视角与部件，`generate-view`／`generate-parts` 需要参考图时自动完成以下步骤：
 

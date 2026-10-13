@@ -30,7 +30,7 @@ description: "通过 Spine 工作台在 Codex 对话中从角色图片或描述�
 
 ## 图片准备与绑定
 
-行走必须是侧面或可读的三分之四侧面，头、衣装和双鞋朝向一致。正面图先用亿创改视角；骨旋转和整体横移不能把正面图变为侧走。只做正面待机或明确保留原图时遵守用户需求。
+行走必须是侧面或可读的三分之四侧面，头、衣装和双鞋朝向一致。正面图先用平台当前生图服务改视角；骨旋转和整体横移不能把正面图变为侧走。只做正面待机或明确保留原图时遵守用户需求。
 
 新角色同批 `generate-parts sheets=["turnaround","character-assets"], body_layout="combined"`，三视图单独作为比对参考，不导入图集。完整衣装从衣领到裙底连续，完整手臂带掌、腿连鞋，长后发独立；不靠固定格位猜测部件。看候选后 `spine_review_parts`，按真实像素和关节 pins 用 `apply-part-layout`；用户已给部件图用 `apply-source-layout`，不重复生图。再看当前 revision 的 assembly，六项连接和图面检查通过后才 ready/build。
 
@@ -38,7 +38,9 @@ description: "通过 Spine 工作台在 Codex 对话中从角色图片或描述�
 
 ## 图像服务与失败边界
 
-新图统一使用亿创 **GPT Image 2.5 Flare**（`gpt-image-2.5-flare`，high/1K/PNG，每次1张），不自动换模型。历史任务按原模型查询。平台自动将当前参考图发布为 HTTPS（已配置存储或启用的临时图片通道）、回读验证并缓存；调用者不登录亿创、不复制链接、不提供服务端凭据。发布失败报告平台原因，不能丢弃参考图改文生图。
+生图服务读取 `spine_sources.image_generation` 的 provider、model 和 reference_transport，由管理员在平台设置页选择。默认保留亿创 Flare，也支持 OpenAI Images 兼容 API（如供应商实际支持的 `gpt-image-2`）；不要根据显示名称猜测接口。`multipart-file` 由平台直接发送当前参考 PNG，无需公开链接、存储或临时通道；`https-url` 才需要已有图片发布服务及对应授权。使用者无需提供服务端密钥。
+
+每次1张，沿用任务预算；历史任务按提交时的服务、模型和配置处理。API 配置保存不等于已完成真实生图验收。提交未知不重新生成，下载失败只恢复同一结果；不自动换供应商、改成文生图或规避审核。
 
 参考图持续授权以所连接平台的 `spine_sources.reference_upload.publication_authorization` 或本机已记录的用户授权为准。`authorized=true` 且范围、用途和有效期匹配时，自动发布任务提交图片及必要派生参考图，无需逐图重复询问；遵守撤销或缩小范围的后续指示。该授权不增加生图预算，不授权上传其他本地文件，也不随安装包转移到另一独立平台。
 

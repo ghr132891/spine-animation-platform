@@ -142,7 +142,7 @@ class AgentTasks:
             for entity in t['owned'].get(kind,[]):
                 for path in (self.storage/KINDS[kind]/entity/'jobs').glob('*.json'):
                     job=json.loads(path.read_text())
-                    jobs.append({'kind':kind,'project_id':entity,**{key:job[key] for key in ('id','model','gen_id','status','candidate_ready','error','poll_error') if key in job}})
+                    jobs.append({'kind':kind,'project_id':entity,**{key:job[key] for key in ('id','provider','model','gen_id','status','candidate_ready','error','poll_error') if key in job}})
         return {k:v for k,v in t.items() if k not in ('request_sha256','owned','reservations','calls','edits')} | {
             'status_url':'/api/automation/agent/tasks/'+id,
             'download_url':'/api/automation/agent/tasks/'+id+'/download' if t['state']=='completed' else None,
@@ -440,7 +440,7 @@ class AgentTasks:
             if t['state'] not in ('queued','running'):raise UserError('任务已结束，不能继续调用工具')
             if t['calls']>=512:raise UserError('超过工具调用上限')
             t['calls']+=1;t['stage']=name;self.save_tool_state(t)
-            if name=='spine_context':return {'requirements':t['requirements'],'sources':t['sources'],'owned':t['owned'],'budget':self.summary(id)['generation_budget'],'max_repairs':t['max_repairs'],'edit_budget':{'used':t['edits'],'limit':max(1,len(t['sources']))*(t['max_repairs']+1)},'image_preparation':t.get('image_preparation','preserve'),'image_assessments':t.get('image_assessments',{}),'turnaround_contract':t.get('turnaround_contract'),'turnaround_checks':t.get('turnaround_checks',{}),'integrity_contract':t.get('integrity_contract'),'garment_contract':t.get('garment_contract'),'detail_contract':t.get('detail_contract'),'seam_contract':t.get('seam_contract'),'preparation_contract':t.get('preparation_contract'),'part_checks':t.get('part_checks',{}),'production_reference':copy.deepcopy(REFERENCE_PROFILE),'capabilities':['runtime-motion-diagnostics','reviewed-part-layout','continuous-limb-mesh','pixel-sole-contact','continuous-limb-prompts','pixel-contact-diagnostics','smooth-gait-curves','simple-result-view','concise-art-prompts','safe-generation-failures','character-asset-sheet-first','side-walk-preparation','joint-reviewed-assembly','polygon-part-crops','neck-seam-closeups','scoped-texture-repair','scoped-material-finish','contrast-material-review','turnaround-reference-review','multi-region-closeups','asset-integrity-review','costume-completion','strict-layer-anchors','garment-occlusion-review','isolated-limb-preview','runtime-preview-cache','parallel-runtime-sampling','platform-review-bundle','scoped-edge-cleanup']}
+            if name=='spine_context':return {'image_generation':self.image_provider_info(),'requirements':t['requirements'],'sources':t['sources'],'owned':t['owned'],'budget':self.summary(id)['generation_budget'],'max_repairs':t['max_repairs'],'edit_budget':{'used':t['edits'],'limit':max(1,len(t['sources']))*(t['max_repairs']+1)},'image_preparation':t.get('image_preparation','preserve'),'image_assessments':t.get('image_assessments',{}),'turnaround_contract':t.get('turnaround_contract'),'turnaround_checks':t.get('turnaround_checks',{}),'integrity_contract':t.get('integrity_contract'),'garment_contract':t.get('garment_contract'),'detail_contract':t.get('detail_contract'),'seam_contract':t.get('seam_contract'),'preparation_contract':t.get('preparation_contract'),'part_checks':t.get('part_checks',{}),'production_reference':copy.deepcopy(REFERENCE_PROFILE),'capabilities':['runtime-motion-diagnostics','reviewed-part-layout','continuous-limb-mesh','pixel-sole-contact','continuous-limb-prompts','pixel-contact-diagnostics','smooth-gait-curves','simple-result-view','concise-art-prompts','safe-generation-failures','character-asset-sheet-first','side-walk-preparation','joint-reviewed-assembly','polygon-part-crops','neck-seam-closeups','scoped-texture-repair','scoped-material-finish','contrast-material-review','turnaround-reference-review','multi-region-closeups','asset-integrity-review','costume-completion','strict-layer-anchors','garment-occlusion-review','isolated-limb-preview','runtime-preview-cache','parallel-runtime-sampling','platform-review-bundle','scoped-edge-cleanup']}
             if name=='spine_deliver_draft':return self.publish_draft(id,args['id'],args['summary'])
             if name=='spine_assess_image':
                 entity=args['id'];self.own(t,'character',entity);c=self.loaders['character'](entity)
@@ -914,6 +914,11 @@ class AgentTasks:
             if self.read(id)['state']=='cancelled':return
             self.update(id,state='completed',stage='已完成 runtime 校验与导出',error=None,artifacts=deliver,result_sha256=sha(content),summary=result.get('summary',''))
 
+    def image_provider_info(self):
+        from .image_provider import ImageProvider
+        status=ImageProvider(self.storage).status()
+        return {key:status[key] for key in ('provider','model','reference_transport','configured')}
+
     def command(self,id,output):
         executable=os.getenv('SPINE_AGENT_CODEX') or shutil.which('codex')
         if not executable:raise UserError('服务机器未安装 Codex CLI')
@@ -932,6 +937,7 @@ class AgentTasks:
         directory=self.path(id).parent;result_path=directory/'agent-result.json'
         prompt=(self.root/'agent/workflow-instructions.txt').read_text()+'\nTask ID: '+id+'\n'+json.dumps(self.summary(id),ensure_ascii=False)
         from .reference_policy import publication_authorization
+        prompt+='\nConfigured image backend (use this provider and transport): '+json.dumps(self.image_provider_info())
         prompt+='\nInstallation reference publication authorization: '+json.dumps(publication_authorization(self.storage),ensure_ascii=False)
         env=os.environ.copy();env['SPINE_AGENT_TOKEN']=self.token
         env.pop('YC_API_KEY',None);env.pop('API_MATRIX_TOKEN',None)

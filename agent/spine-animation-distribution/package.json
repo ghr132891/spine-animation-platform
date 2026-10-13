@@ -54,8 +54,8 @@
       "bytes": 40
     },
     "spine-animation/SKILL.md": {
-      "sha256": "aad21b3a21b898fe91172e1fbb0d3ea0d0853bc2c6390f693dd84f19d87377d1",
-      "bytes": 10112
+      "sha256": "45a041c7573a2b6f87a4a3879b9db53fd6f643a6594bd5fcfa6a7276852543c2",
+      "bytes": 10473
     },
     "spine-animation/agents/openai.yaml": {
       "sha256": "a6cf35ef3dba1b18f235d8dabca505060ff1fdc88e4db7cf28a799808d3c7ee9",
@@ -78,12 +78,12 @@
       "bytes": 14474
     },
     "spine-animation/references/image-preparation.md": {
-      "sha256": "d6644d62890ec4042f9ec2fab1f7a711c26c16f57ae11744fc2c3668be5c728d",
-      "bytes": 29572
+      "sha256": "74a1de9377cb521819f9bfbf3218123c3d48b2ae3aca5d85d5f7e648ffbdc495",
+      "bytes": 29931
     },
     "spine-animation/scripts/install.py": {
-      "sha256": "b0acf4389d10eb35c3c73b5a70d201ceff7a3dbae9a73e757518568cdc60f896",
-      "bytes": 6640
+      "sha256": "cfbc8ffaf50cc301aa66da6854e19838c927a76e06ae7936fdaf6844abf30fa0",
+      "bytes": 6713
     },
     "spine-animation/scripts/doctor.py": {
       "sha256": "cebf89c3d4dea9f91a8f178e822319a236ca94076fb44ae1ad334498eca178bf",

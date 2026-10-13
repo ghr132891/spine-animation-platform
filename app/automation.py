@@ -161,7 +161,7 @@ class AutoReskin:
                 if job_id not in [j['id'] for j in task['jobs']] or not isinstance(gen_id,str) or not re.fullmatch(r'[a-zA-Z0-9_-]{1,128}',gen_id):raise UserError('generation_ids 编号无效')
                 job=self.jobs.read(task['output_project_id'],job_id)
                 if job['status']!='submission_unknown' or job.get('gen_id'):raise UserError('只能绑定提交结果待核实的任务')
-                job.update(gen_id=gen_id,status='pending');updates.append((self.jobs.path(task['output_project_id'],job_id),job))
+                job.update(gen_id=gen_id,status='pending',**self.provider.job_metadata(gen_id));updates.append((self.jobs.path(task['output_project_id'],job_id),job))
             for path,job in updates:atomic_json(path,job)
             self.update(id,state='generating',error=None,refresh_requested=True);self.wake.set()
         return self.summary(id)
@@ -201,11 +201,11 @@ class AutoReskin:
                     job.update(status='submission_unknown',model=DEFAULT_MODEL);atomic_json(path,job);self.update(id,state='generating')
                 try:gen_id=self.provider.generate(job['prompt'],part['reference_url'])
                 except Exception:
-                    job['submission_error']='提交结果待核实；请在亿创核对后绑定已有 gen_id，不会自动重新生成'
+                    job['submission_error']='提交结果待核实；请在原生图服务核对后绑定已有 gen_id，不会自动重新生成'
                     atomic_json(path,job)
                     if self.read(id)['state']!='cancelled':self.update(id,state='needs_attention',error=job['submission_error'])
                     return
-                job.update(gen_id=gen_id,status='pending');atomic_json(path,job);self.jobs.wake.set()
+                job.update(gen_id=gen_id,status='pending',**self.provider.job_metadata(gen_id));atomic_json(path,job);self.jobs.wake.set()
             if job['status']=='submission_unknown':
                 self.update(id,state='needs_attention',error='存在提交结果待核实的生图任务，请绑定已有 gen_id 后恢复');return
         if self.read(id)['state']=='cancelled':return

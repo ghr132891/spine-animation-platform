@@ -17,6 +17,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from app.core import Project, UserError, decode_files, png_bytes, safe_name, MAX_BYTES,atomic_json,read_image,straight
 from app.provider import Matrix,DEFAULT_MODEL,failure_details
+from app.image_provider import ImageProvider
 from app.ai import reference_for,fit_result
 from app.jobs import JobHistory
 from app.rig import RigProject
@@ -33,7 +34,7 @@ STORAGE=ROOT/'storage'
 PROJECTS={}
 PROJECT_LOCK=threading.RLock()
 RIGS={}
-MATRIX=Matrix(STORAGE)
+MATRIX=ImageProvider(STORAGE)
 JOBS=JobHistory(STORAGE,MATRIX)
 CHARACTERS={}
 CHARACTER_JOBS=JobHistory(STORAGE,MATRIX,'characters')
@@ -95,7 +96,7 @@ def character_reference(c, supplied=None, publish=True):
         image=path.with_suffix('.png')
         if job.get('candidate_ready') and job.get('mode')=='character' and job.get('image_urls') and image.exists():
             if sha(png_bytes(read_image(image.read_bytes())))==c.meta['image_id']:
-                return MATRIX.reference_url(job['image_urls'][0])
+                if str(job['image_urls'][0]).startswith('https://'):return MATRIX.reference_url(job['image_urls'][0])
     return MATRIX.ensure_reference(c.image())['url'] if publish else None
 
 
@@ -172,8 +173,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(read_file(ROOT,parts[4],parts[5]),mime='image/png')
             if parts==['api','automation','agent','sources']:
                 return self.send({'access':{'requires_token':AGENT_TASKS.require_token,'mode':'token' if AGENT_TASKS.require_token else 'open'},'projects':AGENT_TASKS.api('/api/projects'),'rigs':AGENT_TASKS.api('/api/rigs'),'characters':AGENT_TASKS.api('/api/characters'),
-                                  'capabilities':['texture-reskin','rig-operations','same-runtime-animation-replacement','mapped-local-bone-curves','character-walk','runtime-validation','runtime-motion-diagnostics','reviewed-part-layout','continuous-limb-mesh','pixel-sole-contact','continuous-limb-prompts','pixel-contact-diagnostics','smooth-gait-curves','simple-result-view','concise-art-prompts','safe-generation-failures','character-asset-sheet-first','side-walk-preparation','joint-reviewed-assembly','polygon-part-crops','neck-seam-closeups','scoped-texture-repair','scoped-material-finish','contrast-material-review','long-hem-secondary-motion','turnaround-reference-review','multi-region-closeups','asset-integrity-review','costume-completion','strict-layer-anchors','garment-occlusion-review','isolated-limb-preview','runtime-preview-cache','parallel-runtime-sampling','platform-review-bundle','scoped-edge-cleanup','durable-task-resume','runtime-sample-cache','grouped-workflow-history','sampled-motion-vision','motion-preview-4-32','gait-phase-diagnostics','rig-supplemental-parts','codex-image-preflight','matrix-reference-view-preparation','matrix-gpt-image-2.5-flare','matrix-reference-cache','server-reference-upload','temporary-reference-tunnel'],
-                                  'image_generation':{'model':DEFAULT_MODEL,'reference_transport':'https-url','prompt_version':PROMPT_VERSION,'prompt_style':'concise-positive-artwork','default_preparation':'asset-sheet','generation_budget':{'additional_default':8,'baseline':{'turnaround':1,'character-assets':1},'zero_forbids_all':True},'preparation_contract':'side-parts-v2','walk_camera':'side-or-three-quarter-side','part_review_required':True,'integrity_contract':'asset-integrity-v1','garment_review':{'contract':'garment-occlusion-v1','scope':'generated-long-costume','walk_leg_frames':32,'idle_leg_frames':8,'isolated_is_diagnostic_only':True},'costume_completion_sheet':'costume','missing_layer_anchor':'reject','numeric_checks_certify_visual_quality':False,'seam_review':{'contract':'neck-seam-v1','frames_per_animation':8,'requires_visual_review':True,'scoped_pixel_repair':True,'material_finish':True,'contrast_backgrounds':['light','dark']},'detail_review':{'contract':'articulation-v1','anchors':['head','torso','l-upper-arm','r-upper-arm','l-upper-leg','r-upper-leg','__hair__'],'frames_per_animation_per_anchor':8},'turnaround':{'contract':'three-view-v1','sheet':'turnaround','views':['front','side','back'],'reference_only':True,'shares_generation_budget':True},'asset_sheet':{'sheet':'character-assets','requires_reviewed_layout':True,'source_layout_reuse':True},'failure_policy':{'review_rejection':'stop','unknown_submission':'verify-existing','query_or_download_error':'retry-same-task','visual_quality':'one-budgeted-revision'}},
+                                  'capabilities':['texture-reskin','rig-operations','same-runtime-animation-replacement','mapped-local-bone-curves','character-walk','runtime-validation','runtime-motion-diagnostics','reviewed-part-layout','continuous-limb-mesh','pixel-sole-contact','continuous-limb-prompts','pixel-contact-diagnostics','smooth-gait-curves','simple-result-view','concise-art-prompts','safe-generation-failures','character-asset-sheet-first','side-walk-preparation','joint-reviewed-assembly','polygon-part-crops','neck-seam-closeups','scoped-texture-repair','scoped-material-finish','contrast-material-review','long-hem-secondary-motion','turnaround-reference-review','multi-region-closeups','asset-integrity-review','costume-completion','strict-layer-anchors','garment-occlusion-review','isolated-limb-preview','runtime-preview-cache','parallel-runtime-sampling','platform-review-bundle','scoped-edge-cleanup','durable-task-resume','runtime-sample-cache','grouped-workflow-history','sampled-motion-vision','motion-preview-4-32','gait-phase-diagnostics','rig-supplemental-parts','codex-image-preflight','matrix-reference-view-preparation','matrix-gpt-image-2.5-flare','matrix-reference-cache','server-reference-upload','temporary-reference-tunnel','configurable-image-provider','openai-images-api'],
+                                  'image_generation':{'model':MATRIX.status()['model'],'provider':MATRIX.status().get('provider','matrix'),'reference_transport':MATRIX.status()['reference_transport'],'prompt_version':PROMPT_VERSION,'prompt_style':'concise-positive-artwork','default_preparation':'asset-sheet','generation_budget':{'additional_default':8,'baseline':{'turnaround':1,'character-assets':1},'zero_forbids_all':True},'preparation_contract':'side-parts-v2','walk_camera':'side-or-three-quarter-side','part_review_required':True,'integrity_contract':'asset-integrity-v1','garment_review':{'contract':'garment-occlusion-v1','scope':'generated-long-costume','walk_leg_frames':32,'idle_leg_frames':8,'isolated_is_diagnostic_only':True},'costume_completion_sheet':'costume','missing_layer_anchor':'reject','numeric_checks_certify_visual_quality':False,'seam_review':{'contract':'neck-seam-v1','frames_per_animation':8,'requires_visual_review':True,'scoped_pixel_repair':True,'material_finish':True,'contrast_backgrounds':['light','dark']},'detail_review':{'contract':'articulation-v1','anchors':['head','torso','l-upper-arm','r-upper-arm','l-upper-leg','r-upper-leg','__hair__'],'frames_per_animation_per_anchor':8},'turnaround':{'contract':'three-view-v1','sheet':'turnaround','views':['front','side','back'],'reference_only':True,'shares_generation_budget':True},'asset_sheet':{'sheet':'character-assets','requires_reviewed_layout':True,'source_layout_reuse':True},'failure_policy':{'review_rejection':'stop','unknown_submission':'verify-existing','query_or_download_error':'retry-same-task','visual_quality':'one-budgeted-revision'}},
                                   'production_reference':REFERENCE_PROFILE,
                                   'ui':{'create':'/auto.html?new=1','result':'/result.html?rig={id}','editor':'/rig.html?rig={id}&advanced=1'},
                                   'reference_upload':MATRIX.reference_status(),
@@ -317,6 +318,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def post(self,data):
         parts=urllib.parse.urlparse(self.path).path.strip('/').split('/')
+        if parts==['api','provider','configure']:
+            import ipaddress
+            if not ipaddress.ip_address(self.client_address[0]).is_loopback:
+                return self.send({'error':'生图服务配置只允许管理员在服务器本机保存'},403)
+            return self.send(MATRIX.configure(data))
         if parts==['api','reference-hosting','tunnel']:
             import ipaddress
             if not ipaddress.ip_address(self.client_address[0]).is_loopback:
@@ -370,7 +376,7 @@ class Handler(BaseHTTPRequestHandler):
                     else:raise UserError('参考图操作无效')
                     return self.send(character_reference_info(c))
             if action=='generation-plan':
-                with c.lock:return self.send({**generation_plan(data,c.meta['settings']['facing']),'model':DEFAULT_MODEL,'reference_transport':'https-url'})
+                with c.lock:return self.send({**generation_plan(data,c.meta['settings']['facing']),'model':MATRIX.status()['model'],'reference_transport':MATRIX.status()['reference_transport']})
             if action=='generate-parts':
                 nonce=str(data.get('nonce',''))
                 if not re.fullmatch('[a-f0-9-]{16,48}',nonce):raise UserError('生成任务编号无效')
@@ -400,7 +406,7 @@ class Handler(BaseHTTPRequestHandler):
                     path=CHARACTER_JOBS.path(c.id,job_id);path.parent.mkdir(exist_ok=True)
                     with c.lock:
                         if path.exists():result.append(json.loads(path.read_text()));continue
-                        job={'id':job_id,'generation_nonce':nonce,'status':'submission_unknown','model':DEFAULT_MODEL,'created_at':time.time(),'prompt':prompts[sheet],'prompt_version':PROMPT_VERSION,'instructions':instructions,'include_back':include_back,'mode':'complete-parts','sheet':sheet,'reference_only':spec.get('reference_only',False),'body_layout':body_layout,'groups':spec.get('groups',{}),'parts':spec['parts'],'columns':spec['columns'],'rows':spec['rows'],'requires_reviewed_layout':spec.get('requires_reviewed_layout',False),'source_image_id':image_id};atomic_json(path,job)
+                        job={'id':job_id,'generation_nonce':nonce,'status':'submission_unknown','model':MATRIX.status()['model'],'provider':MATRIX.status().get('provider','matrix'),'created_at':time.time(),'prompt':prompts[sheet],'prompt_version':PROMPT_VERSION,'instructions':instructions,'include_back':include_back,'mode':'complete-parts','sheet':sheet,'reference_only':spec.get('reference_only',False),'body_layout':body_layout,'groups':spec.get('groups',{}),'parts':spec['parts'],'columns':spec['columns'],'rows':spec['rows'],'requires_reviewed_layout':spec.get('requires_reviewed_layout',False),'source_image_id':image_id};atomic_json(path,job)
                     try:gen_id=MATRIX.generate_part_sheet(sheet,reference_url,instructions,facing,include_back,body_layout)
                     except UserError as e:
                         record_submission_failure(job,e);atomic_json(path,job);result.append(job)
@@ -408,7 +414,7 @@ class Handler(BaseHTTPRequestHandler):
                         # later paid groups from this request.
                         if job['failure']['stop_generation'] or job['status']=='submission_unknown':break
                         continue
-                    job.update(gen_id=gen_id,status='pending');atomic_json(path,job);result.append(job)
+                    job.update(gen_id=gen_id,status='pending',**MATRIX.job_metadata(gen_id));atomic_json(path,job);result.append(job)
                 CHARACTER_JOBS.wake.set();return self.send(result)
             if action=='generate-view':
                 prompt=view_prompt(data.get('target_view'),data.get('target_actions'),data.get('instructions',''))
@@ -417,12 +423,12 @@ class Handler(BaseHTTPRequestHandler):
                     if path.exists():return self.send(json.loads(path.read_text()))
                     c.check(data['revision'])
                     reference=character_reference(c,data.get('reference_url'))
-                    job={'id':nonce,'status':'submission_unknown','model':DEFAULT_MODEL,'created_at':time.time(),'prompt':prompt,'mode':'character','purpose':'animation-view','source_image_id':c.meta['image_id'],'target_view':data['target_view'],'target_actions':data['target_actions']}
+                    job={'id':nonce,'status':'submission_unknown','model':MATRIX.status()['model'],'provider':MATRIX.status().get('provider','matrix'),'created_at':time.time(),'prompt':prompt,'mode':'character','purpose':'animation-view','source_image_id':c.meta['image_id'],'target_view':data['target_view'],'target_actions':data['target_actions']}
                     atomic_json(path,job)
                 try:gen_id=MATRIX.generate_view(prompt,reference)
                 except UserError as e:
                     record_submission_failure(job,e);atomic_json(path,job);return self.send(job)
-                job.update(gen_id=gen_id,status='pending');atomic_json(path,job);CHARACTER_JOBS.wake.set();return self.send(job)
+                job.update(gen_id=gen_id,status='pending',**MATRIX.job_metadata(gen_id));atomic_json(path,job);CHARACTER_JOBS.wake.set();return self.send(job)
             if action=='generate':
                 prompt=str(data.get('prompt','')).strip()
                 if not 5<=len(prompt)<=2000:raise UserError('请填写 5–2000 字的角色描述')
@@ -430,11 +436,11 @@ class Handler(BaseHTTPRequestHandler):
                 path=CHARACTER_JOBS.path(c.id,nonce);path.parent.mkdir(exist_ok=True)
                 with c.lock:
                     if path.exists():return self.send(json.loads(path.read_text()))
-                    c.check(data['revision']);job={'id':nonce,'status':'submission_unknown','model':DEFAULT_MODEL,'created_at':time.time(),'prompt':character_prompt(prompt),'description':prompt,'prompt_version':PROMPT_VERSION,'mode':'character'};atomic_json(path,job)
+                    c.check(data['revision']);job={'id':nonce,'status':'submission_unknown','model':MATRIX.status()['model'],'provider':MATRIX.status().get('provider','matrix'),'created_at':time.time(),'prompt':character_prompt(prompt),'description':prompt,'prompt_version':PROMPT_VERSION,'mode':'character'};atomic_json(path,job)
                 try:gen_id=MATRIX.generate_character(prompt)
                 except UserError as e:
                     record_submission_failure(job,e);atomic_json(path,job);return self.send(job)
-                job.update(gen_id=gen_id,status='pending');atomic_json(path,job);CHARACTER_JOBS.wake.set();return self.send(job)
+                job.update(gen_id=gen_id,status='pending',**MATRIX.job_metadata(gen_id));atomic_json(path,job);CHARACTER_JOBS.wake.set();return self.send(job)
             if action=='refresh-jobs':CHARACTER_JOBS.request_refresh(c.id);return self.send({'ok':True})
             with c.lock:
                 if action=='upload':result=c.set_image(base64.b64decode(data['image'],validate=True),data['revision'])
@@ -521,12 +527,12 @@ class Handler(BaseHTTPRequestHandler):
                     # Record before POST; an ambiguous failure never causes an automatic resubmit.
                     ref,layout=reference_for(p.part(r['id'],True))
                     if data.get('mode','material')=='material':layout['mode']='material'
-                    job={'id':nonce,'region':r['id'],'revision':p.revision,'status':'submission_unknown','model':DEFAULT_MODEL,'created_at':time.time(),'layout':layout,'prompt':str(data['prompt'])[:2000],'mode':data.get('mode','material')}
+                    job={'id':nonce,'region':r['id'],'revision':p.revision,'status':'submission_unknown','model':MATRIX.status()['model'],'provider':MATRIX.status().get('provider','matrix'),'created_at':time.time(),'layout':layout,'prompt':str(data['prompt'])[:2000],'mode':data.get('mode','material')}
                     atomic_json(job_path,job)
                 try:gen_id=MATRIX.generate(str(data['prompt'])[:2000],data.get('reference_url') if data.get('mode')=='reference' else None)
                 except UserError as e:
                     record_submission_failure(job,e);atomic_json(job_path,job);return self.send(job)
-                job.update(gen_id=gen_id,status='pending');atomic_json(job_path,job);JOBS.wake.set()
+                job.update(gen_id=gen_id,status='pending',**MATRIX.job_metadata(gen_id));atomic_json(job_path,job);JOBS.wake.set()
                 return self.send(job)
             else:raise UserError('未知操作')
             return self.send(p.summary())

@@ -17,7 +17,7 @@ cd spine-animation-platform
 
 ## 2. 安装并启动（管理员）
 
-先安装 [Python 3.10 或以上](https://www.python.org/downloads/) 和 [Node.js LTS](https://nodejs.org/)。自动制作还需要服务端可用的 Codex 账号、亿创 API Key 与生图额度。
+先安装 [Python 3.10 或以上](https://www.python.org/downloads/) 和 [Node.js LTS](https://nodejs.org/)。自动制作还需要服务端可用的 Codex 账号，以及所选生图服务的 API Key 与额度。
 
 以下命令适用于 macOS / Linux；本项目完整流程目前在 macOS 验证。Windows 服务端部署尚未完整验收，命令差异见 [部署说明](docs/DEPLOYMENT.md)。
 
@@ -46,11 +46,11 @@ codex login status
 
 在服务器本机打开 **[连接设置](http://127.0.0.1:8780/settings.html)**：
 
-1. 填写自己的亿创 API Key，点击「验证并保存」。新生图使用 **GPT Image 2.5 Flare**。
-2. 配置参考图片通道，供亿创读取原图。简单试用可安装 `cloudflared` 后，在设置页展开「无需存储配置：临时 HTTPS 图片通道」，点击「启用临时图片通道」。安装命令、其他系统和长期存储配置见 [部署说明](docs/DEPLOYMENT.md#参考图片通道)。
-3. 为这台新服务器确认图片发布授权。临时链接最长有效 1 小时，持有链接者可以读取对应图片；原作者的授权不会随仓库转移，具体设置见同一部署说明。
+1. 选择「亿创」或「OpenAI Images 兼容 API」。亿创填写 Key；其他 API 填写根地址、Key 和实际模型 ID（如 `gpt-image-2`）。点击保存，详见 [生图服务配置](docs/IMAGE_PROVIDERS.md)。
+2. **仅亿创需要**配置参考图片通道。兼容 API 直接上传参考图，可跳过图片通道与公开链接授权。简单试用可安装 `cloudflared` 后，在设置页展开「无需存储配置：临时 HTTPS 图片通道」，点击「启用临时图片通道」。安装命令、其他系统和长期存储配置见 [部署说明](docs/DEPLOYMENT.md#参考图片通道)。
+3. 使用临时图片通道时，为这台新服务器确认图片发布授权。临时链接最长有效 1 小时，持有链接者可以读取对应图片；原作者的授权不会随仓库转移，具体设置见同一部署说明。
 
-**网页能打开，只代表服务已启动。** 自动制作还需要 Codex 登录、亿创连接、参考图通道及授权均就绪。生成会使用管理员的账号额度；运行期间服务器需保持联网、开启且不休眠。
+**网页能打开，只代表服务已启动。** 自动制作还需要 Codex 登录和生图服务可用；采用 HTTPS 参考图时还需通道及授权就绪。生成会使用管理员的账号额度；运行期间服务器需保持联网、开启且不休眠。
 
 ## 4. 日常使用
 
@@ -84,7 +84,7 @@ python3 spine-animation/scripts/install.py --base http://服务器IP:8780 --non-
 | 网页打不开 | 启动命令是否仍运行；同事访问需检查服务器 IP、防火墙的 8780 端口和网络互通。 |
 | 页面有了，但自动制作失败 | 服务端运行 `codex login status`；确认 `node`、`codex` 可用，检查页面错误和 [排查说明](docs/DEPLOYMENT.md#排查与维护)。 |
 | 参考图上传失败 | 检查图片通道是否已启用、cloudflared 是否可用、服务器外网和发布授权。 |
-| 亿创失败或额度不足 | 在设置页检查 Key、账户额度及供应商返回原因；不要反复点生成。 |
+| 生图失败或额度不足 | 在设置页检查接口类型、地址、模型 ID、Key 和供应商返回原因；不要反复点生成。 |
 | 下载后没有原来的角色和历史 | 正常。仓库只有代码，自己的素材与任务保存在 `storage/`，请备份该目录。 |
 
 [详细部署与维护](docs/DEPLOYMENT.md) · [平台架构](docs/ARCHITECTURE.md) · [功能与开发记录](docs/DEVELOPMENT_HISTORY.md)

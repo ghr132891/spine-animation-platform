@@ -20,6 +20,7 @@ from app.provider import Matrix
 
 
 class FakeMatrix:
+    job_metadata = Matrix.job_metadata
     def __init__(self):self.submissions=[];self.ambiguous=False;self.fail=False
     def status(self):return {'configured':True}
     def generate(self,prompt,reference_url=None):

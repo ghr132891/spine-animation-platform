@@ -61,17 +61,17 @@ def classify_provider_failure(payload=None, *, http_status=None, operation='quer
         else:category='generation_failed'
     messages={
         'image_recitation':('生成被图像复述审核拦截，本次没有图片结果。','停止自动重试；请核实参考素材权利与原创需求，不自动改写、换图或切换模型。'),
-        'content_review':('生成被内容审核拦截，本次没有图片结果。','停止自动重试；请查看亿创审核说明并重新确认合规需求，不自动改写、换图或切换模型。'),
-        'credentials':('亿创凭据无效、过期或权限不足。','请管理员检查亿创 API Key 与模型权限。'),
-        'rate_limit':('亿创请求过于频繁。','已有生成编号时稍后继续查询同一任务；新提交须先核实未创建任务。'),
-        'invalid_request':('亿创未接受图片请求参数。','检查格式、尺寸和提示词长度后再提交；不以参数修正规避内容审核。'),
-        'service_unavailable':('亿创服务暂时不可用。','已有生成编号时继续查询同一任务；提交状态不明时先在亿创核实，避免重复计费。'),
-        'submission_unknown':('亿创提交结果不明，尚不能确认是否创建了生成任务。','先核实亿创任务列表；不要再次提交或切换模型，避免重复计费。'),
-        'connection_failed':('亿创连接失败或响应无效。','保留任务编号，稍后继续查询同一任务。'),
+        'content_review':('生成被内容审核拦截，本次没有图片结果。','停止自动重试；请查看生图服务审核说明并重新确认合规需求，不自动改写、换图或切换模型。'),
+        'credentials':('生图服务凭据无效、过期或权限不足。','请管理员检查生图服务 API Key 与模型权限。'),
+        'rate_limit':('生图服务请求过于频繁。','已有生成编号时稍后继续查询同一任务；新提交须先核实未创建任务。'),
+        'invalid_request':('生图服务未接受图片请求参数。','检查格式、尺寸和提示词长度后再提交；不以参数修正规避内容审核。'),
+        'service_unavailable':('生图服务服务暂时不可用。','已有生成编号时继续查询同一任务；提交状态不明时先在生图服务核实，避免重复计费。'),
+        'submission_unknown':('生图服务提交结果不明，尚不能确认是否创建了生成任务。','先核实生图服务任务列表；不要再次提交或切换模型，避免重复计费。'),
+        'connection_failed':('生图服务连接失败或响应无效。','保留任务编号，稍后继续查询同一任务。'),
         'download_failed':('生成图片下载暂时失败。','稍后重新查询并下载同一任务结果，无需重新生图。'),
         'reference_unavailable':('参考图链接发布或回读失败，本次尚未提交生图。','先恢复参考图通道并执行 reference ensure，再沿用同一生成请求编号；不要把它当作生成结果下载失败。'),
-        'empty_output':('亿创任务已结束，但没有成功的图片输出。','保留原任务编号并核实亿创失败原因；不自动重新提交。'),
-        'generation_failed':('亿创本次生成未完成。','保留原任务编号并核实亿创失败原因；不自动重新提交。'),
+        'empty_output':('生图服务任务已结束，但没有成功的图片输出。','保留原任务编号并核实生图服务失败原因；不自动重新提交。'),
+        'generation_failed':('生图服务本次生成未完成。','保留原任务编号并核实生图服务失败原因；不自动重新提交。'),
     }
     if category not in messages:category='generation_failed'
     message,action=messages[category]
@@ -87,8 +87,9 @@ def classify_provider_failure(payload=None, *, http_status=None, operation='quer
 
 
 class ProviderError(UserError):
-    def __init__(self,details):
+    def __init__(self,details,terminal_status=None):
         self.details=details
+        self.terminal_status=terminal_status if terminal_status in ('failed','submission_unknown') else None
         super().__init__(details['message']+' '+details['next_action'])
 
 
@@ -316,6 +317,9 @@ class Matrix:
     def generate_view(self,prompt,reference):
         result=self.request('/models/'+DEFAULT_MODEL+'/generate',{'input':{'prompt':prompt,'aspect_ratio':'3:4','resolution':'1K','quality':'high','output_format':'png','background':'opaque','input_images':[self.reference_url(reference)]},'request_num':1})
         return self.generation_id(result)
+
+    def job_metadata(self, gen_id):
+        return {"provider": "matrix", "model": DEFAULT_MODEL}
 
     def poll(self, gen_id, model=DEFAULT_MODEL):
         if model not in (DEFAULT_MODEL, LEGACY_MODEL, 'gpt-image-2'):

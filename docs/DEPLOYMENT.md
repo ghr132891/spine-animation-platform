@@ -20,9 +20,9 @@ python app/server.py --host 0.0.0.0 --port 8780
 
 ## 服务端配置
 
-在 `/settings.html` 配置亿创凭据，默认新生图模型为 GPT Image 2.5 Flare。凭据保存在被 Git 排除的 storage 目录，不写入源代码。已有素材微调可以使用零生图额度。
+在 `/settings.html` 选择生图服务。默认保留亿创 GPT Image 2.5 Flare；也可配置 OpenAI Images 兼容 API 的地址、密钥与模型（例如 `gpt-image-2`），详见 [生图服务配置](IMAGE_PROVIDERS.md)。凭据保存在被 Git 排除的 storage 目录，不写入源代码。已有素材微调可以使用零生图额度。
 
-图生图需要亿创可读取的 HTTPS 参考图片。平台支持配置对象存储，或启用隔离的 Cloudflare 临时图片通道。参考发布配置见 `skills/spine-animation/references/image-preparation.md`；macOS ARM 可用 `tools/install_cloudflared.py` 安装固定版本客户端，其他系统使用对应的官方客户端。
+亿创图生图需要可读取的 HTTPS 参考图片；OpenAI Images 兼容 API 直接上传参考 PNG，可跳过下文的图片通道和公开链接授权。平台支持配置对象存储，或启用隔离的 Cloudflare 临时图片通道。参考发布配置见 `skills/spine-animation/references/image-preparation.md`；macOS ARM 可用 `tools/install_cloudflared.py` 安装固定版本客户端，其他系统使用对应的官方客户端。
 
 每个新部署必须自行配置参考图发布方式及其授权。本仓库不携带原服务器的图片公开授权、登录会话或密钥。
 

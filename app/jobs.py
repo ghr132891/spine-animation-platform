@@ -9,7 +9,7 @@ import threading
 import time
 from pathlib import Path
 from .core import UserError,atomic_json
-from .provider import LEGACY_MODEL,classify_provider_failure,failure_details
+from .provider import LEGACY_MODEL,ProviderError,classify_provider_failure,failure_details
 
 
 class JobHistory:
@@ -80,7 +80,9 @@ class JobHistory:
                 failure=failure_details(error)
                 failures=job.get('poll_failures',0)+1
                 job.update(poll_failures=failures,poll_error=failure['message']+' '+failure['next_action'],failure=failure,next_check_at=time.time()+min(120,5*2**min(failures,5)))
-                if failure['stop_generation']:job.update(status='failed',error=job.pop('poll_error'))
+                if isinstance(error,ProviderError) and error.terminal_status:
+                    job.update(status=error.terminal_status,error=job.pop('poll_error'))
+                elif failure['stop_generation']:job.update(status='failed',error=job.pop('poll_error'))
             job['checked_at']=time.time()
             atomic_json(path,job)
             return job

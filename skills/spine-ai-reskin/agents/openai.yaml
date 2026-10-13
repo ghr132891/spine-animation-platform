@@ -1,0 +1,4 @@
+interface:
+  display_name: "Spine AI 自动换皮"
+  short_description: "根据原 Spine 和目标风格自动调用亿创生图、替换贴图并导出，支持局域网"
+  default_prompt: "使用 $spine-ai-reskin，根据我提供的原 Spine 资源和目标风格自动制作新的换皮资源包。"

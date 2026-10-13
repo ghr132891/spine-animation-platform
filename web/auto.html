@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>图片做动画</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="auto.css"></head>
+<body>
+<header class="auto-header"><a class="auto-brand" href="auto.html?new=1"><svg width="26" height="32" viewBox="0 0 30 36" aria-hidden="true"><path d="M15 3v30M4 10l11-7 11 7M4 25l11 8 11-8" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="15" cy="18" r="5" fill="currentColor"/></svg><span>图片做动画</span></a><div class="header-actions"><a href="result.html">我的动画</a><a href="character.html">高级工作台</a></div></header>
+<div id="notice" class="notice" role="status" hidden></div>
+<section id="login" class="access-panel" hidden><h1>连接动画工作台</h1><p>首次使用，向管理员获取一次访问码。</p><form id="login-form"><label for="access-code">访问码</label><input id="access-code" type="password" autocomplete="off" required maxlength="64"><button class="primary" type="submit">连接</button></form></section>
+<div id="app" hidden>
+<div class="auto-heading"><h1>一张图片，做成动画</h1><p>上传角色，写下想要的动作，然后看效果。</p></div>
+<main class="auto-workspace">
+<section class="request-panel" aria-label="制作动画"><form id="request-form">
+<div class="source-tabs" role="group" aria-label="角色来源"><button id="mode-image" class="active" type="button" aria-pressed="true">上传图片</button><button id="mode-generate" type="button" aria-pressed="false">描述角色</button></div>
+<div id="upload-section"><button id="choose-image" class="image-drop" type="button"><img id="source-preview" alt="待制作的角色原图" hidden><span id="upload-label">上传角色图片</span><span id="upload-note">PNG、JPG 或 WebP，最大 12 MB</span></button><input id="image-file" type="file" accept="image/png,image/jpeg,image/webp" hidden><p id="source-label" class="small" hidden>PNG、JPG 或 WebP，最大 12 MB。</p></div>
+<label class="request-label" for="requirements">想做什么动作？</label><textarea id="requirements" rows="3" maxlength="2000" required>待机和自然行走，保留角色原来的样子。</textarea><p id="request-help" class="small" hidden>例如：走慢一点、步幅小一些。</p>
+<details id="generation-options" class="generation-options"><summary>更多选项</summary><div id="preparation-option"><label><input id="prepare-image" type="checkbox" checked> 先准备完整角色部件图</label><p class="small">先准备适合侧向行走的部件图；正面参考图会先改视角。Codex 检查并修整连接后组装、绑定，再检查待机和行走效果。</p></div><p class="small">动画细节可以在制作后通过 Codex 调整，或进入高级工作台。</p><button id="invite" class="text-button" type="button" hidden>邀请他人使用</button></details>
+<p id="budget-note" class="budget-note">首次三视图＋部件图另计，另有 8 张补图／修订额度，消耗亿创积分。</p><p id="generation-note" class="budget-note" hidden>亿创准备三视图与部件图，Codex 检查并组装；基础图另计，补图／修订最多 8 张，消耗亿创积分。</p>
+<button id="submit" class="primary full" type="submit">生成动画</button><p class="run-note">可以关闭页面，稍后从记录查看结果。</p>
+</form></section>
+<section class="result-panel" aria-label="动画制作结果">
+<div class="result-heading"><h2 id="result-title">看效果</h2><div id="playback" hidden><label for="animation">动作</label><select id="animation"></select><button id="pause" class="secondary">暂停</button></div></div>
+<div class="result-canvas"><div id="result-empty"><svg width="68" height="68" viewBox="0 0 68 68" aria-hidden="true"><circle cx="34" cy="34" r="31" stroke="#a8b7cc" fill="none" stroke-width="2"/><path d="m29 23 17 11-17 11z" fill="#879ab7"/></svg><p id="empty-title">角色动起来的样子，会显示在这里</p><p id="empty-detail">上传一张完整的角色图，就可以开始。</p></div><iframe id="viewer" title="角色动画预览" hidden></iframe></div>
+<div id="progress" class="progress" role="status" hidden><div class="progress-line"><strong id="stage">等待制作</strong><button id="cancel" class="text-button" hidden>停止制作</button></div><p id="current-request" class="small" hidden></p><p id="result-message"></p><p><a id="process-link" class="text-button" hidden>查看全过程与验收问题</a></p><button id="resume" class="text-button" hidden>继续这次制作（复用已有素材）</button><details id="attempt-details" hidden><summary>查看内部处理记录</summary><ul id="attempt-list"></ul></details><details id="process-detail"><summary>查看制作进度</summary><ol id="steps"><li>准备视角与部件</li><li>检查与组装</li><li>制作动作</li><li>优化与导出</li></ol><p id="stage-detail" class="small"></p></details><details id="result-description" hidden><summary>查看制作说明</summary><p id="result-summary"></p></details></div>
+<div id="results" class="result-actions" hidden><a id="open-editor" class="primary button-link">全屏看动画</a><a id="download" class="secondary button-link">下载动画文件</a><a id="advanced-editor" class="detail-link">调整细节</a><select id="artifact" aria-label="选择制作成果" hidden></select></div>
+<form id="refine-form" class="refine-panel" hidden><label for="refine-request">想怎么修改？</label><textarea id="refine-request" rows="3" maxlength="2000" minlength="5" required placeholder="例如：摆臂自然一点，修复肩部接缝，保留其他部分。"></textarea><p class="small">基于当前动画另存修改，保留旧版；本次复用已有素材，不额外生图。</p><button id="refine-submit" type="submit" class="primary">按要求修改</button><p id="refine-status" role="status" class="small"></p></form>
+</section></main>
+<details class="history-panel"><summary>最近制作 <span id="history-count"></span></summary><div class="history-heading"><p class="small">点击记录，继续查看效果。</p><button id="refresh" class="text-button">刷新记录</button></div><p id="history-empty" class="small">制作记录会保存在这里。</p><div id="history-list"></div></details>
+</div>
+<dialog id="invite-dialog"><div class="dialog-heading"><h2 id="invite-title">邀请他人制作动画</h2><button id="close-invite" aria-label="关闭">×</button></div><p id="invite-message">把页面地址和访问码提供给同一局域网的同事。</p><label for="invite-url">页面地址</label><input id="invite-url" readonly><div id="invite-code-section"><label for="invite-code">访问码</label><input id="invite-code" readonly></div><p id="invite-note" class="small">同事首次输入一次，之后直接上传图片、填写需求即可。</p></dialog>
+<script src="auto.js?v=1100-web-refine-1"></script></body></html>

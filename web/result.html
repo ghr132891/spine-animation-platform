@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>查看角色动画</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="result.css"></head>
+<body>
+<header class="result-header"><a class="result-brand" href="auto.html?new=1">角色动画工作台</a><nav aria-label="页面操作"><a href="auto.html?new=1">制作新动画</a><a id="edit" href="rig.html?advanced=1" hidden>调整细节</a></nav></header>
+<main class="result-workspace">
+<div class="result-title"><div><h1>动画效果</h1><p id="name">正在打开动画…</p></div><a id="download" class="primary button-link" hidden>下载动画文件</a></div>
+<div id="notice" class="result-notice" role="status" hidden></div>
+<section class="animation-stage" aria-label="角色动画预览"><div id="empty"><p id="empty-title">正在加载</p><p id="empty-help">稍等一下，动画马上出现。</p></div><iframe id="viewer" title="生成后的角色动画" hidden></iframe></section>
+<div id="controls" class="result-controls" hidden><label for="animation">动作</label><select id="animation"></select><button id="play" class="secondary" type="button">暂停</button><button id="direction" class="secondary" type="button" aria-pressed="false">左右翻转</button><span id="saved" class="saved-note"></span></div>
+<details id="more" class="result-more" hidden><summary>更多选项</summary><div class="more-controls"><label>播放速度<select id="speed"><option value=".5">慢一点</option><option value="1" selected>正常</option><option value="1.5">快一点</option></select></label><label id="skin-label" hidden>外观<select id="skin"></select></label></div></details>
+<form id="refine-form" class="refine-panel" hidden><label for="refine-request">想怎么修改？</label><textarea id="refine-request" rows="3" maxlength="2000" minlength="5" required placeholder="例如：摆臂自然一点，修复肩部接缝，保留其他部分。"></textarea><p class="small">基于当前动画另存修改，保留旧版；本次复用已有素材，不额外生图。</p><button id="refine-submit" type="submit" class="primary">按要求修改</button><p id="refine-status" role="status" class="small"></p></form>
+<details id="library" class="result-library"><summary>查看其他已保存动画</summary><label for="rig-select">选择动画</label><select id="rig-select"></select><p id="library-empty" hidden>还没有动画。<a href="auto.html">上传图片开始制作</a>。</p></details>
+</main><script src="result.js?v=1100-web-refine-1"></script></body></html>

@@ -1,0 +1,29 @@
+# Runtime data, credentials, user submissions and generated deliverables
+/storage/
+/outputs/
+/evidence/
+/delivery/
+/web/downloads/*
+!/web/downloads/.gitkeep
+/AGENTS.md
+**/settings.json
+**/credentials.json
+*.token
+*.pem
+*.key
+.env*
+!.env.example
+# Local environments, caches and downloaded executables
+.venv/
+venv/
+__pycache__/
+*.pyc
+node_modules/
+.DS_Store
+/tools/bin/
+*.log
+/agent/*.plist
+# Generated client bundles (rebuild with tools/package_spine_skills.py)
+/agent/*.zip
+/agent/spine-agent-client/
+/agent/spine-animation-distribution/spine-animation/

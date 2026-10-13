@@ -1,0 +1,4 @@
+interface:
+  display_name: "Spine 动画助手"
+  short_description: "在 Codex 对话中生成 Spine 动画、查看动作并连续微调骨骼"
+  default_prompt: "使用 $spine-animation 根据我的角色图片制作行走动画，并根据后续要求继续微调。"

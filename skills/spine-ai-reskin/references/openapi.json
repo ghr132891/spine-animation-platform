@@ -1,0 +1,2331 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Local Spine Auto Reskin API",
+    "version": "1.9.2",
+    "description": "Local AI-agent API. Generates part-aware prompts from target style, asset names, dimensions and colors, calls configured Matrix/亿创, fits artwork to original alpha, preserves skeleton/atlas bytes and exports an independent project. No hidden vision/LLM recognition. Send X-Spine-Local: 1 for POST. Service listens on 0.0.0.0:8780 by default; use the server LAN IP from other devices. Agent API requires no token by default; optional protected mode uses SPINE_AGENT_REQUIRE_TOKEN=1. All future image generation uses Matrix gpt-image-2.5-flare (high / 1K / PNG). Reference editing requires public HTTPS input_images; character generate-view and generate-parts accept data.reference_url. Historical job polling uses the recorded model. Server-side reference publication: generate-view/parts automatically publish the exact current pixels using centrally configured S3-compatible storage. No Matrix browser login or manual URL for callers. GET /api/characters/{id}/reference is read-only. POST {action:ensure,revision} publishes and verifies; legacy POST {url,revision} registers an existing URL. Administrators configure storage once locally; signed URLs are cached by image hash and refreshed before expiration. Version 1.7.1 supports an explicitly enabled Cloudflare Quick Tunnel as an alternative to S3: an isolated loopback PNG server publishes unpredictable expiring paths, without website login or storage keys. Existing verified S3 configuration takes priority. A temporary-tunnel process restart invalidates its cached URLs. Quick Tunnels have no uptime guarantee. Version 1.8.0 adds reviewed candidate-pixel part layouts and continuous arm/leg chains, per-sheet short instructions, optional backpack layout, official-runtime motion diagnostics and walking delivery gates. These diagnose observed motion, not natural gait quality. Version 1.8.1 adds optional four whole-limb prompts requiring reviewed layout, 60% stance with a smooth mathematical swing target and alpha-sole-target IK for complete rigid foot assets. Contact estimates require final rendered-pixel review; they do not convert frontal assets into side views. Version 1.8.2 adds official-runtime actual-alpha contact diagnostics for a shared scene speed, explicit scope/not_assessed results, reusable Spine 4.2 Hermite Bezier gait curves for newly built characters, and user-intent camera/near-far costume prompt consistency. Numeric contact checks do not certify natural gait, occlusion or side-view identity. Existing assets are unchanged. Version 1.9.1 defaults image creation to asset-sheet: prepare one complete character-assets image preserving appearance with full arms and connected shoe-legs, inspect actual pixels, apply a reviewed layout, then review the current assembly before ready/build. Existing source asset sheets use apply-source-layout without generation. auto retains missing-only preparation; preserve forbids generation. Version 1.9.2 new character asset-sheet tasks use side-parts-v2: side/three-quarter-side camera and consistent facing for walking; spine_review_parts before applying layouts; final six-joint review before ready/build. Crops support crop_polygon/exclude_polygons before rotation, preserving retained pixels. reference_unavailable is a pre-generation publication/readback failure."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "当前工作台地址，支持本机或局域网主机"
+    }
+  ],
+  "security": [
+    {
+      "SpineLocal": []
+    }
+  ],
+  "paths": {
+    "/api/automation/reskin/plan": {
+      "post": {
+        "operationId": "planSpineReskin",
+        "summary": "Inspect Spine and generate prompts without submitting images",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Prompt plan; no generation charge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input or unresolved task",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/automation/reskin/tasks": {
+      "post": {
+        "operationId": "createSpineReskin",
+        "summary": "Create idempotent asynchronous reskin task; submit images, replace textures, export ZIP",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Existing or new durable task",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input or unresolved task",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listSpineReskinTasks",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Tasks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Task"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/automation/reskin/tasks/{task_id}": {
+      "get": {
+        "operationId": "getSpineReskinTask",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9-]{16,64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Task progress and result links",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input or unresolved task",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/automation/reskin/tasks/{task_id}/download": {
+      "get": {
+        "operationId": "downloadSpineReskin",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9-]{16,64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Completed ZIP with unchanged skeleton and atlas, new PNGs and validation/provenance manifests",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input or unresolved task",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/automation/reskin/tasks/{task_id}/cancel": {
+      "post": {
+        "operationId": "cancelSpineReskin",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9-]{16,64}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stops further submissions; already submitted remote images may still finish",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input or unresolved task",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/automation/reskin/tasks/{task_id}/resume": {
+      "post": {
+        "operationId": "resumeSpineReskin",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9-]{16,64}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "generation_ids": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "For submission_unknown only: local job_id -> already-created Matrix gen_id. Never submits a replacement generation."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resume polling or remaining prepared jobs; no resubmission of existing jobs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input or unresolved task",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/automation/agent/sources": {
+      "get": {
+        "summary": "查询项目和能力",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "结果或任务状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "仅在管理员启用可选令牌模式时：访问令牌缺失或无效"
+          }
+        }
+      }
+    },
+    "/api/automation/agent/tasks": {
+      "post": {
+        "summary": "提交自然语言需求，后台 Codex 执行",
+        "security": [
+          {
+            "SpineLocal": []
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "结果或任务状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "仅在管理员启用可选令牌模式时：访问令牌缺失或无效"
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-Spine-Local",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRequest"
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "列出任务",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "任务列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "仅在管理员启用可选令牌模式时：访问令牌缺失或无效"
+          }
+        }
+      }
+    },
+    "/api/automation/agent/batch": {
+      "post": {
+        "summary": "批量提交，每项独立去重及返回错误",
+        "security": [
+          {
+            "SpineLocal": []
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "结果或任务状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "仅在管理员启用可选令牌模式时：访问令牌缺失或无效"
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-Spine-Local",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "requests"
+                ],
+                "properties": {
+                  "requests": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 32,
+                    "items": {
+                      "$ref": "#/components/schemas/AgentRequest"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/automation/agent/tasks/{task_id}": {
+      "get": {
+        "summary": "查询进度、额度与成果",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "结果或任务状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "仅在管理员启用可选令牌模式时：访问令牌缺失或无效"
+          }
+        },
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/automation/agent/tasks/{task_id}/download": {
+      "get": {
+        "summary": "下载已通过校验的资源包合集 ZIP",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "结果或任务状态",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "仅在管理员启用可选令牌模式时：访问令牌缺失或无效"
+          }
+        },
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/automation/agent/tasks/{task_id}/cancel": {
+      "post": {
+        "summary": "取消后续执行，保留已提交生图编号",
+        "security": [
+          {
+            "SpineLocal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "结果或任务状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "仅在管理员启用可选令牌模式时：访问令牌缺失或无效"
+          }
+        },
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Spine-Local",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/automation/agent/refine": {
+      "post": {
+        "summary": "基于已交付骨架微调，另存新任务并保留 parent_task_id",
+        "security": [
+          {
+            "SpineLocal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Spine-Local",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nonce": {
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "type": "string"
+                  },
+                  "requirements": {
+                    "type": "string"
+                  },
+                  "artifact_index": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "max_generations": {
+                    "type": "integer",
+                    "default": 0
+                  },
+                  "max_repairs": {
+                    "type": "integer",
+                    "default": 2
+                  },
+                  "timeout_seconds": {
+                    "type": "integer",
+                    "default": 1800
+                  },
+                  "part_images": {
+                    "type": "array",
+                    "maxItems": 8,
+                    "description": "已生成的补全部件；仅导入 rig 独立副本，初始未绑定，不覆盖原部件",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "name",
+                        "image"
+                      ],
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]{1,80}$"
+                        },
+                        "image": {
+                          "type": "string",
+                          "description": "图片 Base64，单张6MB且最大2048×2048，总计12MB"
+                        }
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "nonce",
+                  "task_id",
+                  "requirements"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已读取成果"
+          },
+          "202": {
+            "description": "已提交微调"
+          },
+          "400": {
+            "description": "输入无效或上一版成果已改动"
+          },
+          "401": {
+            "description": "仅在管理员启用可选令牌模式时：访问令牌缺失或无效"
+          }
+        }
+      }
+    },
+    "/api/automation/agent/tasks/{task_id}/result-view": {
+      "post": {
+        "summary": "读取实际骨架、动作联系图、步态相位或真实鞋底接地诊断",
+        "security": [
+          {
+            "SpineLocal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Spine-Local",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          },
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "view": {
+                    "type": "string",
+                    "enum": [
+                      "inspect",
+                      "motion",
+                      "gait",
+                      "contact"
+                    ]
+                  },
+                  "artifact_index": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "animation": {
+                    "type": "string",
+                    "default": "__setup__"
+                  },
+                  "frame_count": {
+                    "type": "integer",
+                    "minimum": 4,
+                    "maximum": 32,
+                    "default": 8
+                  },
+                  "anchor": {
+                    "type": "string"
+                  },
+                  "axis": {
+                    "type": "string",
+                    "enum": [
+                      "x",
+                      "y"
+                    ],
+                    "default": "x"
+                  },
+                  "pairs": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 8,
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "arm",
+                        "leg"
+                      ],
+                      "properties": {
+                        "arm": {
+                          "type": "string"
+                        },
+                        "leg": {
+                          "type": "string"
+                        },
+                        "arm_endpoint": {
+                          "type": "boolean",
+                          "default": true
+                        },
+                        "leg_endpoint": {
+                          "type": "boolean",
+                          "default": false
+                        }
+                      }
+                    }
+                  },
+                  "options": {
+                    "$ref": "#/components/schemas/ContactOptions"
+                  }
+                },
+                "required": [
+                  "view"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已读取成果"
+          },
+          "202": {
+            "description": "已提交微调"
+          },
+          "400": {
+            "description": "输入无效或上一版成果已改动"
+          },
+          "401": {
+            "description": "仅在管理员启用可选令牌模式时：访问令牌缺失或无效"
+          }
+        }
+      }
+    },
+    "/api/characters/{id}/reference": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "summary": "Read current reference cache and server upload readiness without publishing",
+        "responses": {
+          "200": {
+            "description": "revision, image_id, reference_url, cached and image_url"
+          }
+        }
+      },
+      "post": {
+        "summary": "Ensure a server-uploaded exact reference or register an existing URL; no generation",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "revision"
+                ],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "revision": {
+                    "type": "integer"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "ensure",
+                      "register"
+                    ],
+                    "default": "register"
+                  }
+                },
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "action": {
+                          "const": "ensure"
+                        }
+                      },
+                      "required": [
+                        "action"
+                      ]
+                    },
+                    "then": {},
+                    "else": {
+                      "required": [
+                        "url"
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verified current-image reference metadata"
+          },
+          "400": {
+            "description": "Revision conflict, invalid URL or image mismatch"
+          }
+        }
+      }
+    },
+    "/api/reference-hosting": {
+      "get": {
+        "summary": "Read server reference storage readiness; credentials are never returned",
+        "responses": {
+          "200": {
+            "description": "provider, configured, ready, message"
+          }
+        }
+      }
+    },
+    "/api/reference-hosting/connect": {
+      "post": {
+        "summary": "Local administrator: verify S3 upload/download and save private server config",
+        "description": "Loopback clients only. Sends a 2x2 probe image, verifies exact downloaded pixels and saves only on success. Does not generate images.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "endpoint",
+                  "bucket",
+                  "access_key_id",
+                  "secret_access_key"
+                ],
+                "properties": {
+                  "provider": {
+                    "type": "string"
+                  },
+                  "endpoint": {
+                    "type": "string"
+                  },
+                  "region": {
+                    "type": "string"
+                  },
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "access_key_id": {
+                    "type": "string",
+                    "writeOnly": true
+                  },
+                  "secret_access_key": {
+                    "type": "string",
+                    "writeOnly": true
+                  },
+                  "session_token": {
+                    "type": "string",
+                    "writeOnly": true
+                  },
+                  "prefix": {
+                    "type": "string"
+                  },
+                  "addressing_style": {
+                    "type": "string"
+                  },
+                  "url_ttl": {
+                    "type": "integer",
+                    "default": 86400
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verified readiness without credentials"
+          },
+          "400": {
+            "description": "Invalid config/upload/readback; previous config preserved"
+          },
+          "403": {
+            "description": "Only local platform administrator can save config"
+          }
+        }
+      }
+    },
+    "/api/reference-hosting/tunnel": {
+      "post": {
+        "operationId": "configureTemporaryReferenceTunnel",
+        "summary": "Local administrator enables or disables temporary image-only HTTPS publication",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "action"
+                ],
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "enable",
+                      "disable"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Publication readiness; does not publish images or generate"
+          },
+          "403": {
+            "description": "Only loopback administrator requests are accepted"
+          }
+        }
+      }
+    },
+    "/api/characters/{id}/apply-part-layout": {
+      "post": {
+        "summary": "Apply Codex-reviewed candidate crops, composite parts or continuous limb chains without generation",
+        "description": "Send X-Spine-Local: 1. Job must be a completed complete-parts candidate for the current source image, including character-assets sheets. Validates revision and all crops/pins before saving. Replaces old same-side attachments covered by a whole chain, resets assembly corrections and updates interior joint pins. It does not infer anatomy or fill missing pixels. For character-assets, apply-part-sheet is forbidden. Inspect actual candidate pixels before applying, then reinspect the current assembly and assess parts_reviewed=true at the current revision before ready/build. Worker MCP action: spine_character.apply-part-layout.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PartLayoutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated character summary"
+          },
+          "400": {
+            "description": "Invalid crop/pins, stale source or revision"
+          }
+        }
+      }
+    },
+    "/api/characters/{id}/generate-parts": {
+      "post": {
+        "summary": "Generate a complete character asset sheet or explicitly requested anatomy groups through Matrix GPT Image 2.5 Flare",
+        "description": "Send X-Spine-Local: 1. Generation is potentially paid. Preserve/reuse the same nonce on an unknown result. For asset-sheet preparation, request sheets=[\"character-assets\"] alone: one complete character image with preserved appearance, full arms and connected shoe-legs. The returned job has requires_reviewed_layout=true. Inspect actual candidate pixels and apply-part-layout; apply-part-sheet is forbidden for character-assets. Actual job records capture requested layout and prompt version; legacy anatomy groups remain available for missing-only auto preparation. The Agent worker additionally enforces its durable budget. Reinspect current assembly and record parts_reviewed=true before ready/build. Only character-assets uses body_layout. combined keeps one continuous costume torso covering collar, waist, belt and hem: top row head, whole costume torso, back accessory or empty, empty; bottom row four complete arm/leg chains, yielding 6 or 7 parts. separate keeps independent torso and pelvis. Direct API requests default to separate for compatibility; asset-sheet worker tools supply combined unless separate is explicit.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "revision",
+                  "nonce"
+                ],
+                "properties": {
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "nonce": {
+                    "type": "string"
+                  },
+                  "sheets": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "body",
+                        "arms",
+                        "legs",
+                        "limbs",
+                        "character-assets"
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 3,
+                    "uniqueItems": true,
+                    "description": "asset-sheet preparation uses character-assets alone to generate one complete character asset image requiring reviewed apply-part-layout. Legacy default body/arms/legs remains available. Explicit limbs requests four whole arms/connected shoe-legs in one 2x2 candidate; cannot combine with arms or legs and requires reviewed apply-part-layout."
+                  },
+                  "include_back": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Use false only after visually confirming no backpack/back prop: body uses head/torso/pelvis in 3 columns x 1 row, aspect 3:2."
+                  },
+                  "instructions_by_sheet": {
+                    "type": "object",
+                    "properties": {
+                      "body": {
+                        "type": "string",
+                        "maxLength": 400
+                      },
+                      "arms": {
+                        "type": "string",
+                        "maxLength": 400
+                      },
+                      "legs": {
+                        "type": "string",
+                        "maxLength": 400
+                      },
+                      "limbs": {
+                        "type": "string",
+                        "maxLength": 400
+                      },
+                      "character-assets": {
+                        "type": "string",
+                        "maxLength": 400
+                      }
+                    },
+                    "additionalProperties": false,
+                    "description": "Short anatomy-group notes; must not mix with nonempty legacy instructions."
+                  },
+                  "instructions": {
+                    "type": "string",
+                    "maxLength": 1200
+                  },
+                  "reference_url": {
+                    "type": "string",
+                    "description": "Optional exact public HTTPS reference override; otherwise published by the platform."
+                  },
+                  "body_layout": {
+                    "type": "string",
+                    "enum": [
+                      "combined",
+                      "separate"
+                    ],
+                    "default": "separate",
+                    "description": "Only character-assets uses body_layout. combined keeps one continuous costume torso covering collar, waist, belt and hem: top row head, whole costume torso, back accessory or empty, empty; bottom row four complete arm/leg chains, yielding 6 or 7 parts. separate keeps independent torso and pelvis. Direct API requests default to separate for compatibility; asset-sheet worker tools supply combined unless separate is explicit."
+                  }
+                },
+                "allOf": [
+                  {
+                    "if": {
+                      "required": [
+                        "sheets"
+                      ],
+                      "properties": {
+                        "sheets": {
+                          "contains": {
+                            "const": "character-assets"
+                          }
+                        }
+                      }
+                    },
+                    "then": {
+                      "properties": {
+                        "sheets": {
+                          "maxItems": 1
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing or submitted candidate jobs; character-assets submits one image with requires_reviewed_layout=true"
+          },
+          "400": {
+            "description": "Invalid prompt/layout/revision"
+          }
+        }
+      }
+    },
+    "/api/rigs/{id}/contact": {
+      "post": {
+        "summary": "只读测量当前导出快照的真实鞋底接地、统一速度滑步与循环",
+        "description": "不生图、不更改资源。已知 sole-contact-v1 可自动映射；其他骨架需真实 pairs/phase、scene_speed、stance，缺条件返回 not_assessed。数值不认证自然步态、视角或遮挡。samples默认128、最高512。",
+        "parameters": [
+          {
+            "name": "X-Spine-Local",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "animation": {
+                    "type": "string",
+                    "default": "walk"
+                  },
+                  "options": {
+                    "$ref": "#/components/schemas/ContactOptions"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "status assessed/not_assessed/failed、checks、实际像素数值、resource_sha256 和适用边界"
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/contact": {
+      "post": {
+        "summary": "只读测量当前导出快照的真实鞋底接地、统一速度滑步与循环",
+        "description": "不生图、不更改资源。已知 sole-contact-v1 可自动映射；其他骨架需真实 pairs/phase、scene_speed、stance，缺条件返回 not_assessed。数值不认证自然步态、视角或遮挡。samples默认128、最高512。",
+        "parameters": [
+          {
+            "name": "X-Spine-Local",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "animation": {
+                    "type": "string",
+                    "default": "walk"
+                  },
+                  "options": {
+                    "$ref": "#/components/schemas/ContactOptions"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "status assessed/not_assessed/failed、checks、实际像素数值、resource_sha256 和适用边界"
+          }
+        }
+      }
+    },
+    "/api/automation/agent/contact": {
+      "post": {
+        "summary": "只读测量当前导出快照的真实鞋底接地、统一速度滑步与循环",
+        "description": "不生图、不更改资源。已知 sole-contact-v1 可自动映射；其他骨架需真实 pairs/phase、scene_speed、stance，缺条件返回 not_assessed。数值不认证自然步态、视角或遮挡。samples默认128、最高512。",
+        "parameters": [
+          {
+            "name": "X-Spine-Local",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "animation": {
+                    "type": "string",
+                    "default": "walk"
+                  },
+                  "options": {
+                    "$ref": "#/components/schemas/ContactOptions"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "rig",
+                      "project"
+                    ]
+                  },
+                  "id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "status assessed/not_assessed/failed、checks、实际像素数值、resource_sha256 和适用边界"
+          }
+        }
+      }
+    },
+    "/api/characters/{id}/apply-source-layout": {
+      "post": {
+        "summary": "Apply Codex-reviewed crops and continuous limb chains from an existing source asset sheet without generation",
+        "description": "Send X-Spine-Local: 1. Explicitly crop the current source image after Codex has visually confirmed it is a complete character asset sheet. Requires revision and parts, with no job_id or generation. Validates actual pixel boxes, composite pieces and chain pins before saving; does not infer anatomy or generate missing pixels. Reinspect the current assembly and record source_kind=asset_sheet with parts_reviewed=true at the current revision before ready/build. Worker MCP action: spine_character.apply-source-layout.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceLayoutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated character summary"
+          },
+          "400": {
+            "description": "Invalid source crops/pins or stale revision"
+          }
+        }
+      }
+    },
+    "/api/characters/{id}/generation-plan": {
+      "post": {
+        "summary": "Preview character or part-sheet generation prompts and layouts without generation",
+        "description": "Send X-Spine-Local: 1. This returns the generation plan without submitting an image request. Use mode=complete-parts with sheets=[\"character-assets\"] for one complete sheet requiring reviewed layout. Only character-assets uses body_layout. combined keeps one continuous costume torso covering collar, waist, belt and hem: top row head, whole costume torso, back accessory or empty, empty; bottom row four complete arm/leg chains, yielding 6 or 7 parts. separate keeps independent torso and pelvis. Direct API requests default to separate for compatibility; asset-sheet worker tools supply combined unless separate is explicit.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sheets": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "body",
+                        "arms",
+                        "legs",
+                        "limbs",
+                        "character-assets"
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 3,
+                    "uniqueItems": true,
+                    "description": "asset-sheet preparation uses character-assets alone to generate one complete character asset image requiring reviewed apply-part-layout. Legacy default body/arms/legs remains available. Explicit limbs requests four whole arms/connected shoe-legs in one 2x2 candidate; cannot combine with arms or legs and requires reviewed apply-part-layout."
+                  },
+                  "include_back": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Use false only after visually confirming no backpack/back prop: body uses head/torso/pelvis in 3 columns x 1 row, aspect 3:2."
+                  },
+                  "instructions_by_sheet": {
+                    "type": "object",
+                    "properties": {
+                      "body": {
+                        "type": "string",
+                        "maxLength": 400
+                      },
+                      "arms": {
+                        "type": "string",
+                        "maxLength": 400
+                      },
+                      "legs": {
+                        "type": "string",
+                        "maxLength": 400
+                      },
+                      "limbs": {
+                        "type": "string",
+                        "maxLength": 400
+                      },
+                      "character-assets": {
+                        "type": "string",
+                        "maxLength": 400
+                      }
+                    },
+                    "additionalProperties": false,
+                    "description": "Short anatomy-group notes; must not mix with nonempty legacy instructions."
+                  },
+                  "instructions": {
+                    "type": "string",
+                    "maxLength": 1200
+                  },
+                  "body_layout": {
+                    "type": "string",
+                    "enum": [
+                      "combined",
+                      "separate"
+                    ],
+                    "default": "separate",
+                    "description": "Only character-assets uses body_layout. combined keeps one continuous costume torso covering collar, waist, belt and hem: top row head, whole costume torso, back accessory or empty, empty; bottom row four complete arm/leg chains, yielding 6 or 7 parts. separate keeps independent torso and pelvis. Direct API requests default to separate for compatibility; asset-sheet worker tools supply combined unless separate is explicit."
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "character",
+                      "complete-parts"
+                    ],
+                    "default": "character",
+                    "description": "complete-parts previews part sheets; character previews the initial portrait prompt."
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "description": "Character description used when mode=character."
+                  }
+                },
+                "allOf": [
+                  {
+                    "if": {
+                      "required": [
+                        "sheets"
+                      ],
+                      "properties": {
+                        "sheets": {
+                          "contains": {
+                            "const": "character-assets"
+                          }
+                        }
+                      }
+                    },
+                    "then": {
+                      "properties": {
+                        "sheets": {
+                          "maxItems": 1
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Generation plan with prompt_version, items, image_count, per-item body_layout/groups and requires_reviewed_layout"
+          },
+          "400": {
+            "description": "Invalid mode, sheet layout or prompt notes"
+          }
+        }
+      }
+    },
+    "/api/automation/agent/tasks/{task_id}/tools": {
+      "post": {
+        "summary": "Task-owned worker tools including spine_review_parts",
+        "description": "New side-parts-v2 tasks require actual candidate/source inspection then spine_review_parts before importing layouts. Ready/build for locomotion requires side or three-quarter-side camera with consistent direction; final parts_reviewed requires all six joint_review booleans true. Existing tasks keep their original contract.",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "arguments"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "arguments": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result"
+          },
+          "400": {
+            "description": "Missing current review, invalid data or wrong owned scope"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "SpineLocal": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Spine-Local",
+        "description": "Set to literal 1. Mutation guard header used by both local and LAN callers; not an authentication token."
+      },
+      "SpineAgentToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "读取服务主机 storage/agent-access-token；调用方保存在密钥配置，不在请求正文中发送亿创凭据。"
+      }
+    },
+    "schemas": {
+      "File": {
+        "type": "object",
+        "required": [
+          "name",
+          "data"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "data": {
+            "type": "string",
+            "contentEncoding": "base64"
+          }
+        }
+      },
+      "PlanRequest": {
+        "type": "object",
+        "required": [
+          "style"
+        ],
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$",
+            "description": "Existing local project. Choose this or files."
+          },
+          "files": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/File"
+            },
+            "description": "Base64 JSON/SKEL + atlas + all PNG files, or one ZIP; relative paths preserved."
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "style": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 1000
+          },
+          "region_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            },
+            "description": "Omit to select all atlas regions. Region IDs are returned by plan."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "material",
+              "reference"
+            ],
+            "default": "material"
+          },
+          "reference_urls": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "format": "uri"
+            },
+            "description": "Reference mode: public HTTPS URL of each region's 512x512 reference canvas. Download canvas at /api/projects/{project_id}/reference?id={region_id}."
+          },
+          "max_generations": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 128,
+            "default": 32
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Optional expected source project revision."
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "project_id"
+            ],
+            "not": {
+              "required": [
+                "files"
+              ]
+            }
+          },
+          {
+            "required": [
+              "files"
+            ],
+            "not": {
+              "required": [
+                "project_id"
+              ]
+            }
+          }
+        ]
+      },
+      "CreateRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PlanRequest"
+          },
+          {
+            "type": "object",
+            "required": [
+              "nonce"
+            ],
+            "properties": {
+              "nonce": {
+                "type": "string",
+                "pattern": "^[a-f0-9-]{16,64}$",
+                "description": "Persistent caller-generated idempotency key. Repeat exact request to recover task; changing request with same nonce is rejected."
+              }
+            }
+          }
+        ]
+      },
+      "Plan": {
+        "type": "object",
+        "required": [
+          "style",
+          "mode",
+          "parts",
+          "generation_count",
+          "within_budget"
+        ],
+        "properties": {
+          "style": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "prompt_strategy": {
+            "type": "string"
+          },
+          "source": {
+            "type": "object"
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "prompt",
+                "provider_input"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                "prompt": {
+                  "type": "string"
+                },
+                "provider_input": {
+                  "type": "object"
+                },
+                "layout": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "generation_count": {
+            "type": "integer"
+          },
+          "max_generations": {
+            "type": "integer"
+          },
+          "within_budget": {
+            "type": "boolean"
+          },
+          "constraints": {
+            "type": "object"
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Task": {
+        "type": "object",
+        "required": [
+          "id",
+          "state",
+          "plan",
+          "progress",
+          "status_url",
+          "output_project_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "generating",
+              "assembling",
+              "needs_attention",
+              "failed",
+              "cancelled",
+              "completed"
+            ]
+          },
+          "output_project_id": {
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/Plan"
+          },
+          "jobs": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "progress": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer"
+              },
+              "submitted": {
+                "type": "integer"
+              },
+              "ready": {
+                "type": "integer"
+              }
+            }
+          },
+          "status_url": {
+            "type": "string"
+          },
+          "preview_url": {
+            "type": "string"
+          },
+          "download_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "result_sha256": {
+            "type": "string"
+          },
+          "validation": {
+            "type": "object"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "AgentRequest": {
+        "type": "object",
+        "required": [
+          "nonce",
+          "requirements"
+        ],
+        "properties": {
+          "nonce": {
+            "type": "string",
+            "pattern": "^[a-f0-9-]{16,64}$"
+          },
+          "requirements": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 6000
+          },
+          "sources": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "required": [
+                "kind",
+                "id"
+              ],
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "project",
+                    "rig",
+                    "character"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "revision": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "max_generations": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 128,
+            "default": 4
+          },
+          "max_repairs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5,
+            "default": 2
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 7200,
+            "default": 1800
+          },
+          "image": {
+            "type": "string",
+            "contentEncoding": "base64",
+            "description": "上传角色图原始字节，最多12MB，与 sources 互斥。MCP image_path 在调用端转为本字段。"
+          },
+          "image_preparation": {
+            "type": "string",
+            "enum": [
+              "asset-sheet",
+              "auto",
+              "preserve"
+            ],
+            "default": "asset-sheet",
+            "description": "asset-sheet 默认先准备一张保留外观、包含完整手臂和腿鞋的角色素材图，再由 Codex 显式裁片并检查当前组装绑定后制作动画；原图已是素材图时直接接入。auto 仅按视角／遮挡缺项补图；preserve 不生图；max_generations=0 禁止生图。默认图片预算为4。"
+          }
+        }
+      },
+      "ReviewedPart": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Existing character part name. Whole limbs use l/r-upper-arm or l/r-upper-leg."
+          },
+          "box": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": 0
+            },
+            "minItems": 4,
+            "maxItems": 4,
+            "description": "Pixel box [x0,y0,x1,y1], right/bottom exclusive; must fit candidate image or destination canvas."
+          },
+          "canvas": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 16,
+              "maximum": 2048
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "pieces": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "required": [
+                "box",
+                "dest"
+              ],
+              "properties": {
+                "box": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "description": "Pixel box [x0,y0,x1,y1], right/bottom exclusive; must fit candidate image or destination canvas."
+                },
+                "dest": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "description": "Pixel box [x0,y0,x1,y1], right/bottom exclusive; must fit candidate image or destination canvas."
+                }
+              }
+            }
+          },
+          "start_pin": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "minItems": 2,
+            "maxItems": 2,
+            "description": "Normalized 0–1 coordinates relative to the final sprite after cropping/compositing and optional rotation with an expanded canvas. For group=costume this is required and marks the hip."
+          },
+          "end_pin": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "minItems": 2,
+            "maxItems": 2,
+            "description": "Normalized 0–1 coordinates relative to the final sprite after cropping/compositing and optional rotation with an expanded canvas. For group=costume this is required and marks the neck."
+          },
+          "chain": {
+            "type": "string",
+            "enum": [
+              "arm",
+              "leg"
+            ]
+          },
+          "pins": {
+            "type": "object",
+            "description": "All four named joints required for a chain: shoulder/elbow/wrist/hand or hip/knee/ankle/toe. Normalized 0–1 coordinates relative to the final sprite after cropping/compositing and optional rotation with an expanded canvas.",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          },
+          "rotation": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180,
+            "default": 0,
+            "description": "Degrees, positive counterclockwise. First crop or composite, then rotate with an expanded canvas to fit the rotated sprite. All pins belong to the final rotated sprite."
+          },
+          "group": {
+            "type": "string",
+            "enum": [
+              "costume"
+            ],
+            "description": "Optional complete-costume group. Only name=torso is valid; chain is forbidden. Covers torso and pelvis in one continuous mesh weighted to hip and torso, so the same layout cannot contain an independent pelvis part. Explicit start_pin marks hip and end_pin marks neck on the final rotated sprite."
+          },
+          "crop_polygon": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 128,
+            "items": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          },
+          "exclude_polygons": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 128,
+              "items": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              }
+            }
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "box"
+            ],
+            "not": {
+              "required": [
+                "pieces"
+              ]
+            }
+          },
+          {
+            "required": [
+              "canvas",
+              "pieces"
+            ]
+          }
+        ],
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "group"
+              ],
+              "properties": {
+                "group": {
+                  "const": "costume"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "start_pin",
+                "end_pin"
+              ],
+              "properties": {
+                "name": {
+                  "const": "torso"
+                }
+              },
+              "not": {
+                "required": [
+                  "chain"
+                ]
+              }
+            }
+          }
+        ],
+        "description": " crop_polygon/exclude_polygons mask only existing cropped/composited pixels before rotation; retained RGB and alpha are preserved. Pins remain relative to the final rotated sprite."
+      },
+      "PartLayoutRequest": {
+        "type": "object",
+        "required": [
+          "revision",
+          "job_id",
+          "parts"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "parts": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/ReviewedPart"
+            },
+            "description": "Explicit reviewed parts. A torso with group=costume covers torso plus pelvis as one continuous hip/torso mesh and cannot coexist with an independent pelvis part."
+          }
+        }
+      },
+      "ContactOptions": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "samples": {
+            "type": "integer",
+            "minimum": 32,
+            "maximum": 512,
+            "default": 128
+          },
+          "skin": {
+            "type": "string"
+          },
+          "scene_speed": {
+            "type": "number",
+            "description": "共同场景在runtime世界X的平移补偿速度；向右为正，向左为负，支撑鞋自身世界速度应与其反向。不能为两脚分别设速度。"
+          },
+          "ground_y": {
+            "type": "number"
+          },
+          "stance": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "exclusiveMaximum": 1
+          },
+          "pairs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "slot",
+                "foot",
+                "hip",
+                "knee",
+                "phase"
+              ],
+              "properties": {
+                "slot": {
+                  "type": "string"
+                },
+                "foot": {
+                  "type": "string"
+                },
+                "hip": {
+                  "type": "string"
+                },
+                "knee": {
+                  "type": "string"
+                },
+                "arm": {
+                  "type": "string"
+                },
+                "phase": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SourceLayoutRequest": {
+        "type": "object",
+        "required": [
+          "revision",
+          "parts"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "parts": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/ReviewedPart"
+            },
+            "description": "Explicit reviewed parts. A torso with group=costume covers torso plus pelvis as one continuous hip/torso mesh and cannot coexist with an independent pelvis part."
+          }
+        },
+        "description": "Codex-reviewed explicit parts from the current source asset sheet; no generation job is used."
+      },
+      "PartReview": {
+        "type": "object",
+        "required": [
+          "id",
+          "verdict",
+          "camera_view",
+          "direction_consistent",
+          "joint_review",
+          "identity_preserved",
+          "silhouette_intact",
+          "separated",
+          "reason"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "needs_adjustment",
+              "unsupported"
+            ]
+          },
+          "camera_view": {
+            "type": "string",
+            "enum": [
+              "front",
+              "back",
+              "side",
+              "three-quarter-side",
+              "unknown"
+            ]
+          },
+          "direction_consistent": {
+            "type": "boolean"
+          },
+          "joint_review": {
+            "type": "object",
+            "required": [
+              "shoulder",
+              "elbow",
+              "wrist",
+              "hip",
+              "knee",
+              "ankle"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "shoulder": {
+                "type": "boolean"
+              },
+              "elbow": {
+                "type": "boolean"
+              },
+              "wrist": {
+                "type": "boolean"
+              },
+              "hip": {
+                "type": "boolean"
+              },
+              "knee": {
+                "type": "boolean"
+              },
+              "ankle": {
+                "type": "boolean"
+              }
+            }
+          },
+          "identity_preserved": {
+            "type": "boolean"
+          },
+          "silhouette_intact": {
+            "type": "boolean"
+          },
+          "separated": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,96 @@
+robot.png
+size: 512,512
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+head
+  rotate: false
+  xy: 4, 4
+  size: 98, 94
+  orig: 98, 94
+  offset: 0, 0
+  index: -1
+torso
+  rotate: false
+  xy: 106, 4
+  size: 108, 125
+  orig: 108, 125
+  offset: 0, 0
+  index: -1
+pelvis
+  rotate: false
+  xy: 218, 4
+  size: 76, 44
+  orig: 76, 44
+  offset: 0, 0
+  index: -1
+left-upper-arm
+  rotate: false
+  xy: 298, 4
+  size: 38, 77
+  orig: 38, 77
+  offset: 0, 0
+  index: -1
+left-lower-arm
+  rotate: false
+  xy: 340, 4
+  size: 34, 68
+  orig: 34, 68
+  offset: 0, 0
+  index: -1
+left-upper-leg
+  rotate: false
+  xy: 378, 4
+  size: 42, 82
+  orig: 42, 82
+  offset: 0, 0
+  index: -1
+left-lower-leg
+  rotate: false
+  xy: 424, 4
+  size: 36, 79
+  orig: 36, 79
+  offset: 0, 0
+  index: -1
+left-foot
+  rotate: false
+  xy: 4, 133
+  size: 66, 36
+  orig: 66, 36
+  offset: 0, 0
+  index: -1
+right-upper-arm
+  rotate: false
+  xy: 74, 133
+  size: 38, 77
+  orig: 38, 77
+  offset: 0, 0
+  index: -1
+right-lower-arm
+  rotate: false
+  xy: 116, 133
+  size: 34, 68
+  orig: 34, 68
+  offset: 0, 0
+  index: -1
+right-upper-leg
+  rotate: false
+  xy: 154, 133
+  size: 42, 82
+  orig: 42, 82
+  offset: 0, 0
+  index: -1
+right-lower-leg
+  rotate: false
+  xy: 200, 133
+  size: 36, 79
+  orig: 36, 79
+  offset: 0, 0
+  index: -1
+right-foot
+  rotate: false
+  xy: 240, 133
+  size: 66, 36
+  orig: 66, 36
+  offset: 0, 0
+  index: -1

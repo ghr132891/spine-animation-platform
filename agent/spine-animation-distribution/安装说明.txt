@@ -1,0 +1,93 @@
+Spine 动画助手 · Skill + MCP 安装包（1.10.0）
+
+用途
+在 Codex 中给角色图片或描述，制作 Spine 待机／行走动画。
+生成后继续说“行走慢一点”“步幅小一点”“脚的位置往后调”，基于上一版另存并下载。
+支持已有骨架微调、动作帧图查看与最多32项批量任务。
+
+安装前准备
+1. 本机已安装并登录 Codex，且能运行 Codex CLI。
+2. 本机 Python 3.9 或以上。客户端只用标准库，不需要 pip 安装依赖。
+3. 从管理员获取平台地址，不需要令牌文件。
+   本次平台地址：http://172.16.7.76:8780
+   其他电脑使用服务器局域网或 VPN 地址；不能用127.0.0.1或0.0.0.0指向另一台服务器。
+   客户端无需 Agent 令牌、亿创 Key或存储密钥，也无需登录亿创。
+   管理员须已启用服务机参考图发布器，可用免账户的临时 HTTPS 通道，无需配置对象存储；使用者不负责这项配置。
+4. 平台服务器保持运行、可连通。此包是调用客户端，服务器由管理员维护。
+
+推荐：让对方 Codex 安装
+把安装包解压到本机。将“给Codex的安装指令.txt”里的文字复制到 Codex，填入解压目录和平台地址。
+Codex 可以检查连接、安装 Skill 和注册 MCP。只检查和安装，不会生图或提交制作任务。
+
+也可以直接安装
+macOS：双击“安装.command”。如系统拦截，请从终端运行下述 Python 命令。
+Windows：双击“安装.cmd”。
+Linux：在解压目录运行 python3 spine-animation/scripts/install.py。
+按照提示填写平台地址即可，无需其他凭据。
+
+管理员／自动部署命令（在解压目录执行）
+macOS、Linux：
+python3 spine-animation/scripts/install.py --base http://172.16.7.76:8780 --non-interactive
+
+Windows PowerShell（按实际路径替换）：
+py -3 spine-animation/scripts/install.py --base http://172.16.7.76:8780 --non-interactive
+
+未找到 Codex 时附加 --codex "Codex CLI的绝对路径"。
+安装器先检查服务连接和能力，再复制 Skill 并调用 codex mcp add 注册 spine_animation；保留其他 MCP 配置。
+Skill 安装位置：当前 CODEX_HOME 的 skills/spine-animation；未设置时是 ~/.codex/skills/spine-animation。
+MCP 使用安装时的 Python 绝对路径。更换或卸载该 Python 后，需要重新运行安装程序。
+
+安装后验证
+重启 Codex 或重新加载 MCP，再打开新对话。
+在 Codex 中说：“检查 Spine 动画助手连接，只查询，不生成图片。”
+也可以运行（Windows将 python3 替换成 py -3）：
+python3 ~/.codex/skills/spine-animation/scripts/doctor.py
+如果设置了 CODEX_HOME，使用该目录下的 skills/spine-animation/scripts/doctor.py。
+Windows路径示例：
+py -3 "$HOME\.codex\skills\spine-animation\scripts\doctor.py"
+检测会验证平台连接、版本、MCP握手、15个工具和已注册连接，并读取参考图发布状态；不发布图片、不提交任务、不消耗生图积分。发布器未就绪时交由平台管理员处理，检测成功不代表实际生成已验收。
+
+使用示例
+1. 在 Codex 中附上全身角色图，并说：
+   $spine-animation 用这张图制作自然行走和待机，保留原外观。
+2. 查看结果后继续说：
+   接着上一版，行走放慢20%，其他部分保持。
+3. 继续说：
+   再把步幅小一点，检查脚掌落地并导出。
+4. 下载 ZIP 由 Codex 完成，文件保存到调用电脑。
+新对话继续旧版时，提供之前结果链接或任务编号；不要让 Agent 猜测哪一版。
+
+费用与能力
+上传图片先由Codex检查；合适直接制作，需要补视角／部件时在默认8张额外预算内（首次三视图和完整部件图另计）调用亿创。严格不生图可说明“只用原图，不生图”。后台制作仍使用平台机器上的 Codex 额度。
+按描述生成角色默认8张额外图（首次三视图和完整部件图另计），消耗平台配置的亿创积分。
+目前主要支持人形双足待机、行走和骨骼／动作微调。复杂遮挡、非人形和任意跨骨架动作重定向可能失败。
+输出为可加载的 Spine JSON、atlas、PNG 资源 ZIP；不导出原生 .spine 工程，不能编辑 SKEL 二进制骨架。
+失败会保留记录和旧版；微调默认不重抽图片，超时先查询原任务，避免重复提交。
+
+常见问题
+连不上：先在浏览器打开 http://服务器IP:8780/api/health；核对网络、VPN、服务器是否睡眠或停止。
+返回401：管理员已启用可选的令牌模式；默认1.9.1服务无需令牌。
+没有工具：确认注册名 spine_animation，重新加载 MCP／重启 Codex并新建对话。
+平台版本过旧：请管理员更新，临时 HTTPS 通道需1.9.1或更新，并支持 /api/automation/agent/refine。
+平台参考图发布未就绪或网络不通：联系平台管理员处理；平台保留原任务，使用者不要填写存储密钥或登录亿创。
+本机找不到图片：提供调用电脑上的真实图片路径，不使用服务器文件路径或未下载的图片URL。
+目标文件已存在：选择新版本文件名，下载器不会覆盖已有不同内容的文件。
+
+参考：
+OpenAI MCP：https://learn.chatgpt.com/docs/extend/mcp?surface=cli
+OpenAI Skill：https://developers.openai.com/plugins/build/skills
+
+生成模型：亿创 GPT Image 2.5 Flare（gpt-image-2.5-flare）；历史任务保留原模型查询。
+
+自动参考图（1.9.1）：管理员可启用临时 HTTPS 通道，无需对象存储账户、Cloudflare 账户、域名或存储密钥，服务机需官方 tools/bin/cloudflared 客户端。已有可用 S3 存储优先；S3 仍是可选方式。使用者只把图片和动作发给 Codex。平台服务器按需发布当前原图、核对像素并缓存 HTTPS 链接，再交给亿创生成；使用者无需登录亿创、复制链接或提供亿创／存储凭据。图片已适合目标动作时无需生图。
+
+临时通道只允许随机 token PNG GET，连接独立的本机 PNG 服务器，不开放工作台或目录。图片有效期1小时，服务重启后旧链接失效，平台自动刷新缓存。持有有效图片链接者可读取对应原图。Quick Tunnel 为测试与开发用途，没有可用性保证；平台机器和网络需保持运行。
+
+客户端包不包含服务端发布配置或密钥。发布器未就绪时平台会给出管理员需处理的具体原因；不能仅凭安装成功称已完成免登录实图验收。管理员应验证实际发布、像素校验、补图结果和动作多帧画面。
+Cloudflare 官方说明：https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/
+
+1.9.1 完整部件图优先：新角色默认 asset-sheet。先检查视角，必要时准备视角图，再生成一张完整 character-assets；由 Codex 看真实裁片、标关节、检查组装后绑定。保留原脸、配色和左右装饰，完整臂掌／连续腿鞋减少关节切断。原部件图通过 apply-source-layout 复用，不重复生图。立绘、视角、补图和质量修订共用8张额外额度；首次三视图和完整部件图单独各计1张。部件完整不等于动作自然，最终检查32帧行走和真实鞋底接地。
+
+完整主衣装模式：根据原Spine制作方式，默认尽量保留上衣、腰带、衣摆为整块，连续加权绑定；完整臂掌和腿鞋分别连续绑定。角色需要时可分片。复杂衣摆和发片仍可能需额外图面与骨链；原run不直接当作新walk。
+
+1.9.2 默认流程：正面参考先准备侧向行走视角，再生成完整部件图；Codex 检查和修整连接，组装、绑定，检查待机和行走后继续优化。单人准备立绘，袖片归手臂，保留主衣装连续性。检查与微调自动完成；生成质量、原角色还原和自然步态仍以实图验收为准。

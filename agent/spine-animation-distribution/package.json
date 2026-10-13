@@ -1,0 +1,102 @@
+{
+  "name": "spine-animation-skill-mcp",
+  "version": "1.10.0",
+  "python": ">=3.9",
+  "platforms": [
+    "macOS",
+    "Windows",
+    "Linux"
+  ],
+  "entrypoint": "spine-animation/scripts/install.py",
+  "skill_name": "spine-animation",
+  "mcp_server": "spine_animation",
+  "tools": [
+    "spine_reference",
+    "spine_sources",
+    "spine_submit",
+    "spine_batch",
+    "spine_status",
+    "spine_resume",
+    "spine_cancel",
+    "spine_refine",
+    "spine_result",
+    "spine_preview",
+    "spine_gait",
+    "spine_contact",
+    "spine_closeup",
+    "spine_review_bundle",
+    "spine_download"
+  ],
+  "contains_credentials": false,
+  "files": {
+    "安装说明.txt": {
+      "sha256": "5f0e461f8a12bcf14605dc74b0721994173b582288a3354888a4011f7c77a9c1",
+      "bytes": 7927
+    },
+    "给Codex的安装指令.txt": {
+      "sha256": "183dc4d528b3810687eadcc576efc9692577e36c0530b42bce8d0a9c102980d6",
+      "bytes": 1684
+    },
+    "管理员交付说明.txt": {
+      "sha256": "e71ab97aae2ab084022f31f09f1da134a5e32886af792735c9a9fa0f4ff9d3f7",
+      "bytes": 3755
+    },
+    "安装.command": {
+      "sha256": "bd76224698e40e41c9e7b067f24f89cf35eab8d528e718cbff4720ea4ff80d3e",
+      "bytes": 300
+    },
+    "安装.cmd": {
+      "sha256": "c278d1f68d2d9d0acdab292dbc9d2a7aa7c645062d867ebee5a0218cbabc2c15",
+      "bytes": 182
+    },
+    "connection.example.json": {
+      "sha256": "7aa68c6dedf5b68a68603c6c7a4b6c44a2756a824ee5ad8dc33d4ab925d5ff94",
+      "bytes": 40
+    },
+    "spine-animation/SKILL.md": {
+      "sha256": "aad21b3a21b898fe91172e1fbb0d3ea0d0853bc2c6390f693dd84f19d87377d1",
+      "bytes": 10112
+    },
+    "spine-animation/agents/openai.yaml": {
+      "sha256": "a6cf35ef3dba1b18f235d8dabca505060ff1fdc88e4db7cf28a799808d3c7ee9",
+      "bytes": 272
+    },
+    "spine-animation/references/platform-review.md": {
+      "sha256": "745e7be8547d35d26254aa2d641550cc6a551e4120d95798cfb8ceda2f4b4b62",
+      "bytes": 3889
+    },
+    "spine-animation/references/turnaround-review.md": {
+      "sha256": "add584f74495a05fa96fc5bac54d5d1e6ff43ce5d28faf1799204eff45f6ac42",
+      "bytes": 2722
+    },
+    "spine-animation/references/seam-review.md": {
+      "sha256": "62fbe6b935845407f1a15e78fedaa4ce6e9dfe64f70eb4f72482c73e6e4144d1",
+      "bytes": 12255
+    },
+    "spine-animation/references/rig-refinement.md": {
+      "sha256": "b9b5a2b0b2232442dbcbfb6d225cd72520cf997c177f6530df1844598598b929",
+      "bytes": 14474
+    },
+    "spine-animation/references/image-preparation.md": {
+      "sha256": "d6644d62890ec4042f9ec2fab1f7a711c26c16f57ae11744fc2c3668be5c728d",
+      "bytes": 29572
+    },
+    "spine-animation/scripts/install.py": {
+      "sha256": "b0acf4389d10eb35c3c73b5a70d201ceff7a3dbae9a73e757518568cdc60f896",
+      "bytes": 6640
+    },
+    "spine-animation/scripts/doctor.py": {
+      "sha256": "cebf89c3d4dea9f91a8f178e822319a236ca94076fb44ae1ad334498eca178bf",
+      "bytes": 3267
+    },
+    "spine-animation/scripts/spine_mcp.py": {
+      "sha256": "adface1322ecb795a7694270b2f531da15ca2268d209fcc1b812d0ec7ea909f0",
+      "bytes": 36098
+    },
+    "spine-animation/scripts/spine_workflow.py": {
+      "sha256": "a7f73c5c4136b1013666ff8a4ad554019d7c9b0b4d25c2c827433627fca02644",
+      "bytes": 7867
+    }
+  },
+  "minimum_server_version": "1.10.0"
+}

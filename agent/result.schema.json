@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "properties": {
+    "outcome": {"type": "string", "enum": ["completed", "failed"]},
+    "summary": {"type": "string"},
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {"type": "string", "enum": ["rig", "project", "character"]},
+          "id": {"type": "string"},
+          "version": {"type": "string"},
+          "summary": {"type": "string"}
+        },
+        "required": ["kind", "id", "version", "summary"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["outcome", "summary", "artifacts"],
+  "additionalProperties": false
+}

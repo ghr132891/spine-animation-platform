@@ -1,0 +1,3 @@
+# Python 3.10+; image processing used by the platform.
+Pillow>=10.0,<13
+numpy>=1.24,<3

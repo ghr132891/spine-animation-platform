@@ -1,0 +1,11 @@
+请帮我安装 Spine 动画助手 1.10.0 Skill 和 MCP。
+安装包解压目录：<填写本机解压目录的绝对路径>
+平台地址：http://172.16.7.76:8780
+
+请检查 Python 3.9+、Codex CLI 和平台连接，运行包内 spine-animation/scripts/install.py --base http://172.16.7.76:8780 --non-interactive，安装到我的 Codex Skill 目录，并注册 spine_animation MCP。
+不需要平台 Agent 令牌文件、亿创 Key或存储密钥，也不需要登录亿创。安装后运行已安装 Skill 的 scripts/doctor.py，只查询检测，不上传图片、不提交制作任务、不调用生图。
+若新工具尚未加载，请提示我重新加载 MCP 或重启 Codex，在新对话使用 $spine-animation。
+
+请读取平台 reference_upload.ready；如果未就绪，报告具体平台原因并由管理员处理。管理员可启用官方 cloudflared 临时 HTTPS 通道，不必配置对象存储；已有可用 S3 配置优先。不要让我输入任何存储或亿创凭据、登录亿创或操作服务器，也不要以安装成功代替真实生成验收。
+发布器就绪后，我只需把图片和动作要求发给 Codex；平台后台自动按需发布参考图、调用亿创 GPT Image 2.5 Flare、检查并制作动画。参考图链接由服务端管理，不要求我手动复制。合适原图不生图，保留生成预算与同一 nonce 的超时恢复，不能丢弃参考图或回退模型。
+临时图片链接有效期1小时，服务重启后失效，平台自动刷新缓存。Quick Tunnel 用于测试与开发，没有可用性保证；网络不通时保留任务并如实报告，不能把接口就绪当作补图或动画验收通过。

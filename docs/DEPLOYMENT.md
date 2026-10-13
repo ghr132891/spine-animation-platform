@@ -20,13 +20,15 @@ python app/server.py --host 0.0.0.0 --port 8780
 
 ## 服务端配置
 
-在 `/settings.html` 选择生图服务。默认保留亿创 GPT Image 2.5 Flare；也可配置 OpenAI Images 兼容 API 的地址、密钥与模型（例如 `gpt-image-2`），详见 [生图服务配置](IMAGE_PROVIDERS.md)。凭据保存在被 Git 排除的 storage 目录，不写入源代码。已有素材微调可以使用零生图额度。
+在服务器本机打开 `http://127.0.0.1:8780/settings.html` 选择生图服务。首次配置直接按 [首页的两种配置方式](../README.md#3-首次配置管理员只需一次) 操作，无需修改代码。默认保留亿创 GPT Image 2.5 Flare；也可配置 OpenAI Images 兼容 API 的地址、密钥与模型（例如 `gpt-image-2`），详见 [生图服务配置](IMAGE_PROVIDERS.md)。凭据保存在被 Git 排除的 storage 目录，不写入源代码。已有素材微调可以使用零生图额度。
 
 亿创图生图需要可读取的 HTTPS 参考图片；OpenAI Images 兼容 API 直接上传参考 PNG，可跳过下文的图片通道和公开链接授权。平台支持配置对象存储，或启用隔离的 Cloudflare 临时图片通道。参考发布配置见 `skills/spine-animation/references/image-preparation.md`；macOS ARM 可用 `tools/install_cloudflared.py` 安装固定版本客户端，其他系统使用对应的官方客户端。
 
-每个新部署必须自行配置参考图发布方式及其授权。本仓库不携带原服务器的图片公开授权、登录会话或密钥。
+使用亿创的新部署必须自行配置参考图发布方式及其授权；兼容 API 直接上传文件，无需配置公开链接。本仓库不携带原服务器的图片公开授权、登录会话或密钥。
 
 ## 参考图片通道
+
+**仅使用亿创时需要本节。选择 OpenAI Images 兼容 API 可整节跳过。**
 
 在项目目录打开另一个终端。Apple Silicon Mac 可运行：
 
@@ -54,6 +56,8 @@ python app/server.py --host 0.0.0.0 --port 8780
 
 此记录仅适用于该部署的临时通道，不授权其他文件、永久公开或额外付费生成。撤销时把 `authorized` 改为 `false`，并在设置页关闭通道。未记录授权时后台可能无法自动完成需要公开参考图的步骤；请先配置再提交。S3 的图片共享范围需由管理员另行确认。
 
+## 网络访问
+
 平台默认面向可信局域网，Agent API 免令牌。需要访问控制时，配置 `SPINE_AGENT_REQUIRE_TOKEN=1`、`SPINE_WEB_REQUIRE_CODE=1`；不要把默认免令牌服务直接暴露到公网。更改环境变量后重启服务。
 
 ## Windows 命令差异
@@ -70,7 +74,7 @@ codex login status
 .\.venv\Scripts\python.exe app/server.py --host 0.0.0.0 --port 8780
 ```
 
-仍需完成上面的亿创、图片通道和授权配置。`Start.command` 与 launchd 安装器仅适用于 macOS。Windows 客户端安装 Skill 时，将首页安装命令的 `python3` 改为 `py -3`。
+仍需按首页选择并配置一种生图服务；仅亿创需要额外的图片通道和公开链接授权。`Start.command` 与 launchd 安装器仅适用于 macOS。Windows 客户端安装 Skill 时，将首页安装命令的 `python3` 改为 `py -3`。
 
 ## Skill/MCP 与日常使用
 

@@ -152,9 +152,9 @@ class ImageProvider(Matrix):
             return {'url': 'local-reference:' + digest, 'image_id': digest, 'provider': 'direct-upload'}
         return None
 
-    def ensure_reference(self, image):
+    def ensure_reference(self, image, force=False):
         if self.config()['provider'] == 'matrix':
-            return super().ensure_reference(image)
+            return super().ensure_reference(image, force=force)
         data = png_bytes(image.convert('RGBA')); digest = sha(data)
         with self.lock:
             self.local_refs.mkdir(parents=True, exist_ok=True)

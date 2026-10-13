@@ -132,7 +132,7 @@ class WebWorkflows:
     def public(self,t):
         ready=t['state']=='completed'
         detail=t.get('stage_detail','') if t.get('stage')=='spine_character' else ''
-        stage={'queued':'排队等待','completed':'制作完成','failed':'本次未完成','cancelled':'已停止','interrupted':'处理已中断'}.get(t['state'])
+        stage={'waiting_reference':'等待参考图恢复（自动继续）','queued':'排队等待','completed':'制作完成','failed':'本次未完成','cancelled':'已停止','interrupted':'处理已中断'}.get(t['state'])
         if not stage:
             stage={'generate':'生成角色图片','generate-view':'准备动作所需视角','generate-parts':'准备完整角色部件图','apply-ai':'准备角色图片','apply-part-sheet':'组装角色部件','apply-part-layout':'组装并检查部件','apply-source-layout':'复用原图部件','guide':'定位骨骼与关节','review':'调整部件接合','build':'制作行走动画','foot-layers':'调整脚腿遮挡'}.get(detail)
         if not stage:stage={'spine_context':'读取制作需求','spine_assess_image':'检查视角与连接','spine_review_parts':'检查部件与连接','spine_inspect':'分析角色与骨骼','spine_image':'检查角色外观','spine_wait':'等待图片生成','spine_edit_rig':'调整骨骼与动作','spine_create_rig':'创建骨架','spine_validate':'检查资源','spine_motion':'检查动画画面','spine_gait':'检查摆臂与循环','spine_contact':'测量鞋底接地与滑步'}.get(t.get('stage'),'正在自动制作')
@@ -151,7 +151,7 @@ class WebWorkflows:
             preview=('/result.html?rig='+rig_id+('&animation=walk' if 'walk' in animations else '') if rig_id else a['preview_url'])
             editor=('/rig.html?rig='+rig_id+'&advanced=1' if rig_id else a.get('editor_url',a['preview_url']))
             result.append({'kind':a['kind'],'id':a['id'],'rig_id':rig_id,'runtime':runtime,'animations':animations,'preview_url':preview,'editor_url':editor})
-        return {'id':t['id'],'state':t['state'],'requirements':t['requirements'],'created_at':t['created_at'],'stage':stage,
+        return {'id':t['id'],'state':t['state'],'reference_recovery':t.get('reference_recovery'),'requirements':t['requirements'],'created_at':t['created_at'],'stage':stage,
                 'is_refinement':bool(t.get('web_refine_parent')),'max_repairs':t.get('max_repairs',4),
                 'steps':steps,'step':index,'error':t.get('error'),'summary':t.get('summary',''),'artifacts':result,
                 'download_url':'/api/workflows/tasks/'+t['id']+'/download' if ready else None,

@@ -217,8 +217,10 @@ class ReferenceHosting:
             with urllib.request.build_opener(NoRedirect).open(request, timeout=25) as response:
                 if not 200 <= response.status < 300:
                     raise UserError('平台图片存储未接受上传，请管理员检查配置')
-        except urllib.error.HTTPError as error:
-            raise UserError('平台图片存储上传返回 HTTP ' + str(error.code) + '，请管理员检查桶名、端点和读写权限') from None
-        except (urllib.error.URLError, TimeoutError, OSError):
-            raise UserError('平台图片存储上传连接失败；未提交生图，请管理员检查网络和存储配置') from None
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            from .provider import ProviderError, classify_provider_failure
+            from .reference_health import network_error
+            details=classify_provider_failure(category='reference_unavailable',operation='reference')
+            details['network']=network_error(error)
+            raise ProviderError(details) from None
         return {'url': signed_get(config, url, now), 'expires_at': now + config['url_ttl'], 'provider': 's3'}

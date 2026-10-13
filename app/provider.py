@@ -263,32 +263,70 @@ class Matrix:
         if record:return record['url']
         raise UserError('当前原图尚未关联云端参考图；spine_reference ensure 或补图生成会由平台自动发布。管理员可启用临时 HTTPS 通道或配置存储，使用者无需登录亿创或复制链接。旧版仍可使用 spine_reference prepare。')
 
-    def ensure_reference(self,image):
+    def ensure_reference(self,image,force=False):
         from .core import png_bytes,read_image,sha,atomic_json
+        from .reference_health import record, status
         import time
-        # Shared across characters: concurrent requests for the same pixels publish once.
         with self.lock:
             cached=self.cached_reference(image)
-            if cached:return cached
             data=png_bytes(image.convert('RGBA'));image_id=sha(data)
             publisher = self.hosting if self.hosting.status()['ready'] else self.tunnel
-            published=publisher.publish(data,image_id)
-            url=self.reference_url(published['url'])
-            try:downloaded=self.download_result(url,timeout=20)
-            except ProviderError:
-                raise ProviderError(classify_provider_failure(category='reference_unavailable',operation='reference')) from None
-            if sha(png_bytes(read_image(downloaded)))!=image_id:
-                raise UserError('平台自动发布的参考图像素校验失败，未关联或提交生图；请管理员检查图片通道')
-            record={'image_id':image_id,'url':url,'verified_at':time.time(),
-                    'expires_at':published['expires_at'],'provider':published['provider']}
-            atomic_json(self.references/(image_id+'.json'),record)
-            return record
+            provider=(cached or {}).get('provider') or publisher.status()['provider']
+            health=status(self.path.parent,provider)
+            # A cached URL is reusable only with a recent real readback check.
+            if cached and not force and health['usable']:return cached
+            for attempt in range(1,4):
+                stage='publish'
+                try:
+                    published=cached or publisher.publish(data,image_id)
+                    cached=published
+                    url=self.reference_url(published['url']);stage='readback'
+                    downloaded=self.download_result(url,timeout=8)
+                    if sha(png_bytes(read_image(downloaded)))!=image_id:
+                        raise UserError('参考图像素不一致')
+                    result={'image_id':image_id,'url':url,'verified_at':time.time(),
+                            'expires_at':published.get('expires_at',time.time()+3600),'provider':provider}
+                    atomic_json(self.references/(image_id+'.json'),result)
+                    record(self.path.parent,provider,'verified',image_id,attempt)
+                    return result
+                except (ProviderError,UserError) as error:
+                    if isinstance(error,ProviderError):
+                        detail=error.details.get('network') or {'code':'network_error','message':'网络连接失败','retryable':True,'http_status':None}
+                    elif stage=='readback':
+                        detail={'code':'invalid_image','message':'图片内容无效或像素不一致','retryable':False,'http_status':None}
+                    else:
+                        startup='35 秒' in str(error) or '无法启动' in str(error)
+                        detail={'code':'tunnel_startup' if startup else 'publication_config',
+                                'message':'临时通道启动未连通' if startup else '参考图发布配置或权限不可用',
+                                'retryable':startup,'http_status':None}
+                    event=record(self.path.parent,provider,stage,image_id,attempt,detail)
+                    # Publication can already take 35 seconds. Defer its retry to
+                    # the durable scheduler instead of exceeding MCP timeouts.
+                    if not detail['retryable'] or stage=='publish' or attempt==3:
+                        failure=classify_provider_failure(category='reference_unavailable',operation='reference')
+                        failure.update(reference_check=event,retry_reference=detail['retryable'])
+                        failure['message']+=' '+detail['message']
+                        raise ProviderError(failure) from None
+                    time.sleep(attempt)
+
+    def check_reference_channel(self):
+        from PIL import Image
+        # Only a synthetic probe is published; no workspace asset is selected.
+        self.ensure_reference(Image.new('RGBA',(2,2),(39,99,151,255)),force=True)
+        return self.reference_status()
 
     def reference_status(self):
         from .reference_policy import publication_authorization
         storage = self.hosting.status()
         status = dict(storage if storage['ready'] else self.tunnel.status())
         status['publication_authorization'] = publication_authorization(self.path.parent)
+        from .reference_health import status as health_status
+        health=health_status(self.path.parent,status['provider'])
+        if status['provider']=='quick-tunnel' and not status.get('active'):
+            health={**health,'usable':False,'state':'inactive','message':'临时通道未连接，需实际检测'}
+        status['health']=health
+        status['usable']=bool(status['ready'] and health['usable'])
+        status['message']=health['message'] if status['ready'] else status['message']
         return status
 
     def configure_reference_hosting(self,config):
@@ -347,5 +385,8 @@ class Matrix:
                 if len(data)>30*1024*1024:raise UserError('生成图片超过 30 MB')
                 read_image(data)
                 return data
-        except (urllib.error.URLError,TimeoutError):
-            raise ProviderError(classify_provider_failure(category='download_failed')) from None
+        except (urllib.error.URLError,TimeoutError,OSError) as error:
+            from .reference_health import network_error
+            details=classify_provider_failure(category='download_failed')
+            details['network']=network_error(error)
+            raise ProviderError(details) from None

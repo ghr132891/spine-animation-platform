@@ -354,7 +354,7 @@ class TunnelProviderIntegrationTests(unittest.TestCase):
         self.assertEqual(record['provider'], 'quick-tunnel')
         self.assertEqual(record['image_id'], self.image_id)
         self.matrix.tunnel.publish.assert_called_once_with(self.data, self.image_id)
-        self.matrix.download_result.assert_called_once_with(REFERENCE, timeout=20)
+        self.matrix.download_result.assert_called_once_with(REFERENCE, timeout=8)
         self.matrix.tunnel.active_reference.assert_called_with(REFERENCE)
         self.matrix.hosting.publish.assert_not_called()
         self.matrix.request.assert_not_called()

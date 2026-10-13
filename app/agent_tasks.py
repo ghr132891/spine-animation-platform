@@ -106,7 +106,11 @@ def part_images(items):
     return result
 
 
-class AgentTasks:
+from .reference_recovery import ReferenceRecovery
+from .provider import ProviderError
+
+
+class AgentTasks(ReferenceRecovery):
     def __init__(self,storage,root,loaders,rig_automation):
         self.storage=Path(storage);self.root=Path(root);self.tasks=self.storage/'agent-tasks'
         self.loaders=loaders;self.rig_automation=rig_automation
@@ -316,6 +320,8 @@ class AgentTasks:
             t.setdefault('execution_attempts',[]).append({'state':t['state'],'error':t.get('error'),'ended_at':t.get('updated_at')})
             t.update(state='queued',stage='复用已有素材继续制作',resume_nonce=request_nonce,updated_at=time.time())
             t.pop('error',None)
+            if self.reference_request_path(id).exists():
+                t['reference_recovery']={'state':'replaying','started_at':time.time(),'deadline':time.time()+1800,'attempts':0}
             prior=self.path(id).parent/'agent-result.json'
             if prior.exists():prior.rename(prior.with_name('agent-result-attempt-'+str(len(t['execution_attempts']))+'.json'))
             # Owned assets, reservations, consumed budget and generation IDs are preserved.
@@ -335,8 +341,11 @@ class AgentTasks:
         try:
             with urllib.request.urlopen(req,timeout=110) as r:body=r.read()
         except urllib.error.HTTPError as e:
-            try:message=json.load(e).get('error','平台请求失败')
-            except Exception:message='平台请求失败'
+            try:body=json.load(e)
+            except Exception:body={}
+            if isinstance(body.get('failure'),dict) and body['failure'].get('category')=='reference_unavailable':
+                raise ProviderError(body['failure']) from None
+            message=body.get('error','平台请求失败')
             raise UserError(message) from None
         return body if binary else json.loads(body)
 
@@ -435,6 +444,13 @@ class AgentTasks:
                     raise UserError('本次生图提交状态尚未确认，停止新提交；请先核实并查询原任务，避免重复计费')
 
     def tool(self,id,name,args):
+        with self.tool_lock:
+            try:return self._tool(id,name,args)
+            except ProviderError as error:
+                self.defer_reference(id,name,args,error)
+                raise
+
+    def _tool(self,id,name,args):
         with self.tool_lock:
             t=self.read(id)
             if t['state'] not in ('queued','running'):raise UserError('任务已结束，不能继续调用工具')
@@ -911,7 +927,7 @@ class AgentTasks:
             z.writestr('manifest.json',json.dumps({'task_id':id,'requirements':t['requirements'],'turnaround_checks':t.get('turnaround_checks',{}),'artifacts':deliver},ensure_ascii=False,indent=2))
         content=out.getvalue();path=self.path(id).parent/'result.zip';tmp=path.with_suffix('.tmp');tmp.write_bytes(content);tmp.replace(path)
         with self.lock:
-            if self.read(id)['state']=='cancelled':return
+            if self.read(id)['state'] in ('cancelled','waiting_reference'):return
             self.update(id,state='completed',stage='已完成 runtime 校验与导出',error=None,artifacts=deliver,result_sha256=sha(content),summary=result.get('summary',''))
 
     def image_provider_info(self):
@@ -935,17 +951,22 @@ class AgentTasks:
 
     def execute(self,id):
         directory=self.path(id).parent;result_path=directory/'agent-result.json'
-        prompt=(self.root/'agent/workflow-instructions.txt').read_text()+'\nTask ID: '+id+'\n'+json.dumps(self.summary(id),ensure_ascii=False)
+        prompt=(self.root/'agent/workflow-instructions.txt').read_text()
         from .reference_policy import publication_authorization
         prompt+='\nConfigured image backend (use this provider and transport): '+json.dumps(self.image_provider_info())
         prompt+='\nInstallation reference publication authorization: '+json.dumps(publication_authorization(self.storage),ensure_ascii=False)
         env=os.environ.copy();env['SPINE_AGENT_TOKEN']=self.token
         env.pop('YC_API_KEY',None);env.pop('API_MATRIX_TOKEN',None)
         try:
-            cmd=self.command(id,result_path)
             with self.lock:
                 if self.read(id)['state']!='queued':return
-                self.update(id,state='running',stage='Codex 自动编排')
+                self.update(id,state='running',stage='恢复原请求' if self.read(id).get('reference_recovery',{}).get('state')=='replaying' else 'Codex 自动编排')
+            self.replay_reference_request(id)
+            prompt+='\nTask ID: '+id+'\n'+json.dumps(self.summary(id),ensure_ascii=False)
+            cmd=self.command(id,result_path)
+            with self.lock:
+                if self.read(id)['state']!='running':return
+                self.update(id,stage='Codex 自动编排')
                 trace=open(directory/'events.jsonl','w');errors=open(directory/'stderr.log','w')
                 self.process=subprocess.Popen(cmd,cwd=directory,stdin=subprocess.PIPE,stdout=trace,stderr=errors,text=True,env=env)
                 self.active=id
@@ -953,12 +974,12 @@ class AgentTasks:
             except subprocess.TimeoutExpired:
                 self.process.kill();self.process.wait();raise UserError('任务达到时间上限；已提交生图编号保留，不会自动重提')
             finally:trace.close();errors.close()
-            if self.read(id)['state']=='cancelled':return
+            if self.read(id)['state'] in ('cancelled','waiting_reference'):return
             if self.process.returncode or not result_path.exists():raise UserError('Codex 执行失败；检查服务端日志及 CLI 登录状态')
             self.update(id,stage='校验并打包成果');self.finish(id,json.loads(result_path.read_text()))
         except Exception as e:
             with self.lock:
-                if self.read(id)['state']!='cancelled':self.update(id,state='failed',stage='处理未完成',error=str(e)[:1000] if isinstance(e,UserError) else '后台处理失败，任务和生成编号已保留')
+                if self.read(id)['state'] not in ('cancelled','waiting_reference'):self.update(id,state='failed',stage='处理未完成',error=str(e)[:1000] if isinstance(e,UserError) else '后台处理失败，任务和生成编号已保留')
         finally:
             with self.lock:self.process=None;self.active=None
 
@@ -968,6 +989,7 @@ class AgentTasks:
         for p in self.tasks.glob('*/task.json'):
             if json.loads(p.read_text())['state']=='running':self.update(p.parent.name,state='interrupted',stage='服务重启，保留所有生成与成果记录')
         while not self.stop.is_set():
+            self.recover_references()
             queued=sorted((p for p in self.tasks.glob('*/task.json') if json.loads(p.read_text())['state']=='queued'),key=lambda p:p.stat().st_mtime)
             if queued:self.execute(queued[0].parent.name)
             else:self.wake.wait(3);self.wake.clear()

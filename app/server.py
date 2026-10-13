@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from app.core import Project, UserError, decode_files, png_bytes, safe_name, MAX_BYTES,atomic_json,read_image,straight
-from app.provider import Matrix,DEFAULT_MODEL,failure_details
+from app.provider import Matrix,DEFAULT_MODEL,failure_details,ProviderError
 from app.image_provider import ImageProvider
 from app.ai import reference_for,fit_result
 from app.jobs import JobHistory
@@ -89,7 +89,7 @@ def character_reference(c, supplied=None, publish=True):
     if supplied:
         return MATRIX.reference_url(supplied)
     cached=MATRIX.cached_reference(c.image())
-    if cached:return cached['url']
+    if cached:return MATRIX.ensure_reference(c.image())['url'] if publish else cached['url']
     from app.core import sha
     for path in (c.directory/'jobs').glob('*.json'):
         job=json.loads(path.read_text())
@@ -153,6 +153,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:self.get()
+        except ProviderError as e:self.send({'error':str(e),'failure':e.details},503)
         except WebError as e:self.send({'error':str(e)},e.status)
         except (UserError,KeyError,IndexError) as e:self.send({'error':str(e)},400)
         except (ConnectionResetError,BrokenPipeError):pass
@@ -311,6 +312,7 @@ class Handler(BaseHTTPRequestHandler):
             if length>MAX_BYTES*2:return self.send({'error':'请求过大'},413)
             data=json.loads(self.rfile.read(length))
             return self.post(data)
+        except ProviderError as e:self.send({'error':str(e),'failure':e.details},503)
         except WebError as e:self.send({'error':str(e)},e.status)
         except (UserError,ValueError,KeyError,IndexError) as e:self.send({'error':str(e)},400)
         except (BrokenPipeError,ConnectionResetError):pass
@@ -323,6 +325,13 @@ class Handler(BaseHTTPRequestHandler):
             if not ipaddress.ip_address(self.client_address[0]).is_loopback:
                 return self.send({'error':'生图服务配置只允许管理员在服务器本机保存'},403)
             return self.send(MATRIX.configure(data))
+        if parts==['api','reference-hosting','check']:
+            import ipaddress
+            if not ipaddress.ip_address(self.client_address[0]).is_loopback:
+                return self.send({'error':'参考图检测只允许管理员在服务器本机执行'},403)
+            if MATRIX.status()['reference_transport']!='https-url':
+                return self.send({'message':'当前 API 直接上传图片，无需公网参考图通道','required':False})
+            return self.send(MATRIX.check_reference_channel())
         if parts==['api','reference-hosting','tunnel']:
             import ipaddress
             if not ipaddress.ip_address(self.client_address[0]).is_loopback:
@@ -371,7 +380,7 @@ class Handler(BaseHTTPRequestHandler):
             if action=='reference':
                 with c.lock:
                     c.check(data['revision'])
-                    if data.get('action')=='ensure':character_reference(c)
+                    if data.get('action')=='ensure':MATRIX.ensure_reference(c.image())
                     elif data.get('action','register')=='register':MATRIX.register_reference(c.image(),data.get('url',''))
                     else:raise UserError('参考图操作无效')
                     return self.send(character_reference_info(c))

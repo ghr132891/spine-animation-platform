@@ -159,7 +159,8 @@ class CombinedReferenceBuildTests(unittest.TestCase):
         self.image, self.layout = combined_fixture()
         self.character = CharacterProject.create(self.storage, 'complete combined source fixture')
         self.character.set_image(png_bytes(self.image), 0)
-        self.character.update({'revision': self.character.meta['revision'], 'landmarks': assembly_guide(),
+        guide=assembly_guide();guide['r-shoulder'][0]=.54  # Embed the narrow synthetic shirt's sleeve root.
+        self.character.update({'revision': self.character.meta['revision'], 'landmarks': guide,
                                'settings': self.character.meta['settings'], 'masks': {}})
         self.source_pixels = png_bytes(self.character.image())
         self.matrix = Matrix(self.storage)
@@ -172,6 +173,8 @@ class CombinedReferenceBuildTests(unittest.TestCase):
 
     def build(self):
         self.apply()
+        from tests.test_asset_sheet_workflow import accept_fixture_prebind
+        accept_fixture_prebind(self.character)
         with patch('app.character.split_image', side_effect=AssertionError('Complete crops need no segmentation')) as split, \
                 patch('app.character.skin_field', return_value=object()):
             # A deliberately unusable atlas field proves the costume attachment

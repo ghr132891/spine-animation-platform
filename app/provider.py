@@ -111,8 +111,8 @@ class Matrix:
         self.references = Path(storage) / "reference-images"
         from .reference_hosting import ReferenceHosting
         self.hosting = ReferenceHosting(storage)
-        from .reference_tunnel import ReferenceTunnel
-        self.tunnel = ReferenceTunnel(storage)
+        from .reference_sidecar import DurableReferenceTunnel
+        self.tunnel = DurableReferenceTunnel(storage)
         self.lock = threading.RLock()
         self.last = {"state": "unchecked", "message": "尚未验证亿创连接"}
 
@@ -274,7 +274,7 @@ class Matrix:
             provider=(cached or {}).get('provider') or publisher.status()['provider']
             health=status(self.path.parent,provider)
             # A cached URL is reusable only with a recent real readback check.
-            if cached and not force and health['usable']:return cached
+            if cached and not force and health['usable'] and health.get('image_id')==image_id and time.time()-cached.get('verified_at',0)<300:return cached
             for attempt in range(1,4):
                 stage='publish'
                 try:

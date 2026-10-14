@@ -35,11 +35,11 @@ class PublicationPolicyTests(unittest.TestCase):
             matrix = Matrix(root)
             try:
                 matrix.tunnel.enable(86400)
-                matrix.tunnel._hostname = 'test.trycloudflare.com'
+                matrix.tunnel.local._hostname = 'test.trycloudflare.com'
                 data = png_bytes(Image.new('RGBA', (2, 2), (10, 20, 30, 255)))
-                with patch.object(matrix.tunnel, '_ensure_started'):
+                with patch.object(matrix.tunnel.local, '_ensure_started'):
                     before = time.time()
-                    result = matrix.tunnel.publish(data, sha(data))
+                    result = matrix.tunnel.local.publish(data, sha(data))
                 self.assertLessEqual(result['expires_at'], time.time() + 3600)
                 self.assertGreaterEqual(result['expires_at'], before + 3599)
                 self.assertTrue(matrix.reference_status()['publication_authorization']['authorized'])

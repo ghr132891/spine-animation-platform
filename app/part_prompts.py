@@ -8,14 +8,17 @@ from .image_preflight import requested_camera_policy
 
 # The layout contract is deliberately described as art assets rather than anatomy.
 # Source pixels still need visual review; wording alone cannot certify the result.
-COMMON=('Match the reference character, camera, palette, materials and scale. '
- 'Keep one-sided costume details on their original image side. '
- 'Complete occluded garment and accessory artwork in the original style. '
- 'Place one isolated cut-out in each occupied cell with generous white spacing. '
- 'Use closed outlines, rounded mounting edges, consistent paired scale and a plain white background. ')
+COMMON=('Match the reference character, camera, palette, scale and original image-side details. '
+ 'Complete occluded garment and accessory artwork. Closed cut-outs in each occupied cell. '
+ 'Align portrait inside collar; continuous waistband, nonrepeating textile transitions. '
+ 'Complete silhouettes, sleeve-hidden textiles and concealed trouser inserts. '
+ 'Backpacks use the worn side view, strap face inward, outer pockets outward. ')
 COMMON_ZH=('保持参考角色、视角、配色、材质和比例。单侧服装装饰保留在原图对应侧。'
  '按原风格补齐服装与配件被遮挡的图案。每个有素材的格放一个独立切片，格间留白。'
- '轮廓闭合，连接边缘圆润，成对素材比例一致，纯白背景。')
+ '轮廓闭合，连接边缘圆润，成对素材比例一致，纯白背景。'
+ '肖像连接边准确进入原衣领开口。裤腰图案只保留在一块连续主素材，裤装插接区留无重复腰线的覆盖余量。'
+ '每片素材包含独立完整轮廓和隐藏插接余量，袖后主衣料连续，裤装在裤腰下连续延伸；移开相邻素材后仍完整。'
+ '背包使用与角色一致的穿戴侧视角，肩带面贴衣装，外袋朝外，独立完整包体补齐袖后遮挡图面。裤料过渡自然，不使用镜像平铺纹理。')
 SHEETS={
  'costume':{'ratio':'2:3','columns':1,'rows':1,'parts':['torso'],'groups':{'torso':'costume'},
  'requires_reviewed_layout':True,
@@ -60,8 +63,8 @@ SHEETS={
  'collar-to-waist torso; waist/pelvis costume; complete reference back accessory. '
  'BOTTOM ROW, left to right: source image-left complete arm/palm; source image-right complete arm/palm; '
  'source image-left complete leg/shoe; source image-right complete leg/shoe. '
- 'Each arm and leg forms ONE connected silhouette with clear palms and whole shoes. '
- 'Preserve original face, head orientation, proportions and ONE assembly scale. '
+ 'Each arm/palm and leg/shoe stays connected. '
+ 'Preserve face, orientation, reference footwear size and ONE assembly scale. '
  'Rounded shoulder/hip overlaps and natural elbow/knee contours support bending. '
  'Both shoes pointing RIGHT, with horizontal soles.',
  'prompt_zh':'角色动画素材，严格4列2行。上排从左到右：原头部与头饰；衣领至腰线的躯干衣装；腰胯衣装；参考图中完整背部配件。'
@@ -77,7 +80,7 @@ BODY_WITHOUT_BACK={
            'RIGHT CELL: the waist costume panel. This sheet contains these three pieces only.'),
  'prompt_zh':'角色素材切片，严格3列1行。左格：原肖像与头饰，保留短连接边缘。中格：从衣领到腰线的主衣片。右格：腰部衣片。本图只包含以上三片素材。'}
 
-PROMPT_VERSION='animation-parts-v15'
+PROMPT_VERSION='animation-parts-v21'
 
 
 def prompt_language(*texts):
@@ -110,11 +113,17 @@ def sheet_spec(sheet,include_back=True,body_layout='separate'):
         spec['prompt']=spec['prompt'].replace('complete reference back accessory','an empty white cell')
         spec['prompt_zh']=spec['prompt_zh'].replace('参考图中完整背部配件','纯白空格')
     if sheet=='character-assets':
-        spec['prompt']+=' Match connection colors. Keep complete waist-to-hem fabric separate from moving assemblies. Rear hair uses the accessory cell.'
-        spec['prompt_zh']+=' 肖像与衣装保留连续连接图面，肩端覆盖区颜色一致。主衣装保留从腰线连到前后裙底的完整衣料，包括被遮挡部分；衣裙仅归属衣装，活动组合独立且轮廓完整。保持原实色与轻纱材质，边缘干净、裙摆自然垂落。后发单独放在背部配件格，并置于肩臂后方。'
+        spec['prebind_contract']='complete-assets-v1'
+        spec['prompt']+=' Complete cut-outs. Sleeveless costume; open collar with front/back rims, clean portrait insert. '
+        spec['prompt_zh']+=' 独立完整部件优先于紧密排版。独立袖装对应的主体保留完整袖后衣料，不重复绘制整条袖装。衣领只归主衣装，保留可读的前后领边与真实领口开口，肖像保留干净领口插接区。连接余量延续所属材质，所有部件统一组装尺度，部件间充分留白。'
+        spec['prompt']+=' Match overlaps and continuous textiles; separate existing long hair from backpack.'
+        spec['prompt_zh']+=' 肖像与衣装保留连续连接图面，肩端覆盖区颜色一致。主衣装保留从腰线连到前后裙底的完整衣料，包括被遮挡部分；衣裙仅归属衣装，活动组合独立且轮廓完整。保持原实色与轻纱材质，边缘干净、裙摆自然垂落。仅当参考存在长后发时单独提供，保留已有背包，不互相替代。'
     if sheet in ('character-assets','costume'):
-        spec['prompt']+=' For long costumes, match reference openings, opaque rear coverage, sheer panels and side-view clearance. Use relaxed continuous assemblies with short concealed rounded overlaps.'
+        spec['prompt']+=' For long costumes preserve openings, opaque and sheer panels.'
         spec['prompt_zh']+=' 若参考为长衣装，保留原开衩、后侧实色遮挡与轻纱分区。活动组合采用自然舒展的连续轮廓，连接区仅留短而圆润的隐藏重叠量，衣片间距与侧面参考一致。'
+    if sheet in ('arms','limbs','character-assets'):
+        spec['prompt']+=' Relaxed downward sleeve assemblies, reference terminal orientation, aligned cuffs, readable overlaps and distinct near/far designs.'
+        spec['prompt_zh']+=' 两侧袖装组合自然下垂，末端素材保持参考自然站姿的朝向，近远侧设计分别保留，袖口对齐，连接覆盖区清楚。'
     spec.setdefault('requires_reviewed_layout',False)
     spec['body_layout']=body_layout
     return spec

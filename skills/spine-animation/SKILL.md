@@ -20,7 +20,7 @@ description: "通过 Spine 工作台在 Codex 对话中从角色图片或描述�
 
 ## 平台主导的快速复检（1.10.0）
 
-完成一轮关联修改后，优先 `spine_review_bundle(kind,id)`。平台一次冻结最终资源、决定帧数与区域、两路渲染、测量接地、扫描 alpha 残点并持久保存复检包。省略 animations 检查全部动作；行走全身和双腿32帧，待机和其他局部8帧。
+完成一轮关联修改后，优先 `spine_review_bundle(kind,id)`。平台一次冻结最终资源、决定帧数与区域、两路渲染、测量接地、扫描 alpha 残点并持久保存复检包。省略 animations 检查全部动作；行走全身、双腿、颈口与腰胯/背包连接32帧，待机和其他局部8帧。
 
 返回清单后用同一工具的 `panel` 读取各张原尺寸图。平台缓存跨客户端、跨进程复用；图片/骨架/动作/渲染器改变即失效。不要在每次单像素调整后重做全套，也不要为读取复检包新建制作任务。后台用 `spine_review_regions` 一次提交多区域真实结论，任一无效则整批不写入。工具缺失时才回退 `spine_preview/spine_closeup/spine_contact`。
 
@@ -28,9 +28,25 @@ description: "通过 Spine 工作台在 Codex 对话中从角色图片或描述�
 
 局部边缘问题先区分：独立孤点、连通细发丝、抗锯齿边、重复衣料、缺失连接。平台只对新生成部件自动清理极弱独立插值尘点（alpha≤3、面积≤4像素）；不自动侵蚀主体、不处理用户原素材。其他修复查看实际部件后选定范围，使用 `material-finish`，无需重画或自行编写 Python。详见 [平台复检与边缘修复](references/platform-review.md)。
 
+## 完整部件生成门禁
+
+用户提供标准 atlas/部件图并要求对比生成路线时，先读[模板与补全分层实测](references/parts-comparison.md)，使用平台 parts-lab 冻结母版和模板、保存两条真实回执。参考图约束不等于硬几何控制；See-through 合并的双腿不能标成完整独立两腿。未通过部件、试拼、摆开和连接检查时停留素材阶段，交付真实失败图，不套旧网格掩盖裁切问题。试验模型尚未替换默认生成。
+
+新生成先执行[完整部件三项验收](references/complete-assets.md)：独立部件、试拼、摆开全部通过后再制作动画。未通过时交付素材阶段结果，不创建动画草稿绕过。
+
+## 默认执行补全与装配
+
+完整部件导入后平台自动登记同坐标图层；需要补图或前后领/肩带遮挡时执行 `prepare-assembly`，已校准来源省略手写锚点，由平台自动配准；局部导入保留其他修复，整批失败保留原版本。将实际来源配准、隐藏重叠与前景拆层落实到预览和导出，不能只添加验收规则。先读[默认装配执行路径](references/assembly-execution.md)。已有完整素材优先复用，缺失图面必须有真实补图；验收失败不等于停止可行的素材修复。
+
+## 同坐标分层优先
+
+新任务先补齐独立完整部件，再按同一母版分层。唯一归属只约束可见图案，不禁止隐藏重叠；静态拼回和双向摆开验收都通过后再正式绑定。平台提供partition-canvas和install-canvas-layers；不把生成的格子位置当组装坐标。详见 [同坐标流程](references/canvas-layers.md)。旧任务按原合同兼容。
+
 ## 图片准备与绑定
 
-行走必须是侧面或可读的三分之四侧面，头、衣装和双鞋朝向一致。正面图先用平台当前生图服务改视角；骨旋转和整体横移不能把正面图变为侧走。只做正面待机或明确保留原图时遵守用户需求。
+行走必须是侧面或可读的三分之四侧面，头、衣装和双鞋朝向一致。新任务 `limb-orientation-v1` 逐侧记录双臂映射、掌面及双鞋方向；翻掌与遮挡检查见 [骨架与动作微调](references/rig-refinement.md)。正面图先用平台当前生图服务改视角；骨旋转和整体横移不能把正面图变为侧走。只做正面待机或明确保留原图时遵守用户需求。
+
+腿鞋比例与过度屈膝优先复用素材：使用平台自然步态、鞋部等比缩放及实际膝角检查，详见 [骨架与动作微调](references/rig-refinement.md)。
 
 新角色同批 `generate-parts sheets=["turnaround","character-assets"], body_layout="combined"`，三视图单独作为比对参考，不导入图集。完整衣装从衣领到裙底连续，完整手臂带掌、腿连鞋，长后发独立；不靠固定格位猜测部件。看候选后 `spine_review_parts`，按真实像素和关节 pins 用 `apply-part-layout`；用户已给部件图用 `apply-source-layout`，不重复生图。再看当前 revision 的 assembly，六项连接和图面检查通过后才 ready/build。
 
@@ -69,3 +85,5 @@ description: "通过 Spine 工作台在 Codex 对话中从角色图片或描述�
 服务默认局域网免令牌；用户指定地址优先，不用 `0.0.0.0` 作请求地址。仅管理员启用 `SPINE_AGENT_REQUIRE_TOKEN=1` 时才用可选 token-file，不能输出令牌。settings.json 只保存平台地址等客户端设置，服务端生图凭据不打包。
 
 安装：`python3 scripts/install.py --base http://服务器IP:8780 --non-interactive`。无 MCP 时由 Codex 执行 [scripts/spine_workflow.py](scripts/spine_workflow.py) 的 submit/status/refine/preview/download；每个版本保存独立 state 文件，重复提交复用原 nonce。批量用 `spine_batch`（最多32项），跟进每项终态。不要把这些命令变成普通用户必须完成的操作。
+
+新生成与适用的修复任务含 `assembly-connections-v3`：复检包增加腰胯与背包局部，颈口记录开口对齐和前领遮挡；裤腰检查重复腰线、台阶及动态稳定；背包比对真实穿戴视角，不盲目镜像。字段和修法见 `references/rig-refinement.md`。平台自动稳定新腿链的髋部连接，视觉证据仍须实际查看。

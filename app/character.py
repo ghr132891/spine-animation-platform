@@ -15,6 +15,7 @@ from .part_review import checked_review,apply_adjustment,component_stats,compose
 from .reviewed_parts import extract_parts,aligned_chain,chain_mesh,costume_mesh,CHAINS
 from .gait import walk_phase,sole_target,solve_two_bone,spine_bezier_timeline
 from .foot_contact import sole_profile
+from .assembly_pipeline import atomic_assembly
 
 JOINTS={'head':'头中心','neck':'颈部','hip':'腰部','l-shoulder':'左侧肩','l-elbow':'左侧肘','l-wrist':'左侧腕','l-hand':'左侧手尖',
         'r-shoulder':'右侧肩','r-elbow':'右侧肘','r-wrist':'右侧腕','r-hand':'右侧手尖',
@@ -65,14 +66,16 @@ def checked_landmarks(value):
 
 def checked_settings(value):
     return {'background':number(value.get('background',32),0,150),'period':number(value.get('period',1),.5,3),
-            'stride':number(value.get('stride',.22),.04,.5),'lift':number(value.get('lift',.07),.02,.25),
+            'stride':number(value.get('stride',.22),.04,.5),'lift':number(value.get('lift',.035),.02,.25),
+            'foot_scale':number(value.get('foot_scale',.9),.65,1.2),
             'facing':value.get('facing','right') if value.get('facing','right') in ('right','left') else 'right',
-            'clear_gaps':value.get('clear_gaps',True) is not False}
+            'clear_gaps':value.get('clear_gaps',True) is not False,
+            'background_seeds':[[number(v,0,1) for v in p] for p in value.get('background_seeds',[]) if isinstance(p,list) and len(p)==2][:32]}
 
 
 def guide_cutout(image,landmarks,masks,settings):
     """Seed enclosed background between separated legs, outside drawn parts."""
-    holes=[];W,H=image.size
+    W,H=image.size;holes=[(p[0]*W,p[1]*H) for p in settings.get('background_seeds',[])]
     if landmarks and settings.get('clear_gaps',True):
         outlines=Image.new('L',image.size);draw=ImageDraw.Draw(outlines)
         for points in (masks or {}).values():draw.polygon([(p[0]*W,p[1]*H) for p in points],fill=255)
@@ -305,9 +308,20 @@ def make_skeleton(image,landmarks,parts,settings,masks=None,draw_order=None):
     order=draw_order or (COSTUME_DRAW_ORDER if any(p.get('group')=='costume' for p in parts) else DRAW_ORDER);rigid_feet=any(p['name'].endswith('-foot') and p.get('complete') and not p.get('preserve_mesh') for p in parts)
     for name in order:
         if name not in by:continue
-        part=by[name];bound='hip' if name=='pelvis' else 'torso' if name=='back' else name
+        part=by[name]
+        if part.get('overlay_of'):
+            source=part['overlay_of'];slot=next(s for s in slots if s['name']==source)
+            att=copy.deepcopy(atts[source][source]);att['path']=name
+            slots.append({**slot,'name':name,'attachment':name});atts[name]={name:att}
+            continue
+        bound='hip' if name=='pelvis' else 'torso' if name=='back' else name
         att=chain_mesh(part,bones,absposes,scale,origin,H) if part.get('chain') else costume_mesh(part,bones,absposes,scale,origin,H,landmarks,W) if part.get('group')=='costume' else region_attachment(part,absposes,bound,scale,origin,H) if part.get('complete') and not part.get('preserve_mesh') else mesh_attachment(part,bones,absposes,field,scale,origin,H,landmarks,W,rigid_feet)
         slots.append({'name':name,'bone':bound,'attachment':name});atts[name]={name:att}
+    # Scale footwear uniformly about the ankle; blended chain weights keep
+    # the collar continuous. Preserve texture bytes and the leg bone lengths.
+    foot_scale=settings.get('foot_scale',.9)
+    for bone in bones:
+        if bone['name'] in ('l-foot','r-foot'):bone.update(scaleX=foot_scale,scaleY=foot_scale)
     period=settings['period'];frames=256;stance=.6
     times=sorted(set([period*i/frames for i in range(frames+1)]+[period*.1,period*.6]));walk={};idle={}
     bybone={b['name']:b for b in bones};leglengths=[bybone[s+'-upper-leg']['length']+bybone[s+'-lower-leg']['length'] for s in ('l','r')];leg=sum(leglengths)/2
@@ -319,32 +333,43 @@ def make_skeleton(image,landmarks,parts,settings,masks=None,draw_order=None):
     for side in ('l','r'):
         part=by.get(side+'-foot') or next((p for p in parts if p.get('chain')=='leg' and p['name'].startswith(side+'-')),None)
         profiles[side]=sole_profile(part,np.array(landmarks[side+'-ankle'])*[W,H],absposes[side+'-foot'][1],scale,origin,H)
+        if profiles[side]:
+            profiles[side]['points']=(np.array(profiles[side]['points'])*foot_scale).tolist()
         if profiles[side] and part['name'] in actual_slots:foot_slots[side]=part['name']
     pixel_profiles=[p for p in profiles.values() if p]
     ground=min(p['setup_ground_y'] for p in pixel_profiles) if len(pixel_profiles)==2 else None
-    plans={};max_hip_offset=0;bob_peak=leg*.012
+    plans={};side_offsets={};max_hip_offset=float('inf');bob_peak=leg*.006
+    # Natural walking is a low-clearance motion, not a high-knee step.
+    requested_lift=leg*settings['lift'];lift=min(requested_lift,leg*.04)
     def planned(side,t):
         phase=0 if side=='l' else .5
         sample=walk_phase(t/period+phase,stance)
-        profile=profiles[side];ankle=points[side+'-ankle'];basefoot=absposes[side+'-foot'][1]
+        profile=profiles[side];ankle=points[side+'-ankle'].copy();basefoot=absposes[side+'-foot'][1]
+        # A posed source often puts both ankles behind the hips. Center the
+        # step under its own hip instead of turning that lean into a crouch.
+        ankle[0]=points[side+'-hip'][0]
         angle=(profile['flat_angle'] if profile else basefoot)+sample['pitch_deg']*facing
         if profile:
-            target=sole_target(ankle,profile['points'],angle,sample,stride,leg*settings['lift'],facing,ground if ground is not None else profile['setup_ground_y'])['ankle']
+            target=sole_target(ankle,profile['points'],angle,sample,stride,lift,facing,ground if ground is not None else profile['setup_ground_y'])['ankle']
         else:
-            target=ankle+np.array([sample['dx']*stride*facing,sample['clearance']*leg*settings['lift']])
+            target=ankle+np.array([sample['dx']*stride*facing,sample['clearance']*lift])
         return sample,target,angle
     for side,phase in [('l',0),('r',.5)]:
         upper=side+'-upper-leg';lower=side+'-lower-leg';foot=side+'-foot'
-        L1,L2=bybone[upper]['length'],bybone[lower]['length'];base_hip=points[side+'-hip']
+        L1,L2=bybone[upper]['length'],bybone[lower]['length'];base_hip=points[side+'-hip'];side_offsets[side]=float('inf')
         for t in times:
             _,target,_=planned(side,t)
             # Keep the leg below full extension for every sampled target,
-            # including Hermite swing overshoot. Lower the hip only as needed.
+            # including Hermite swing overshoot. Allow a crouched source hip
+            # to rise: an initial cap of zero silently preserved deep flexion.
             reach=(L1+L2)*.995;dx=target[0]-base_hip[0]
             allowed=math.sqrt(max(0,reach*reach-dx*dx))
-            max_hip_offset=min(max_hip_offset,target[1]+allowed-base_hip[1]-bob_peak)
+            side_offsets[side]=min(side_offsets[side],target[1]+allowed-base_hip[1]-bob_peak)
+            max_hip_offset=min(max_hip_offset,side_offsets[side])
         plans[side]=(L1,L2,base_hip)
-    def bob(t):return max_hip_offset+leg*.006*(1-math.cos(4*math.pi*t/period))
+    # Small perspective asymmetry is absorbed beneath the reviewed waist overlap.
+    hip_correction={s:min(leg*.08 if any(p.get('canvas_anchors') and p.get('group')=='costume' for p in parts) else 0,max(0,v-max_hip_offset)) for s,v in side_offsets.items()}
+    def bob(t):return max_hip_offset+leg*.003*(1-math.cos(4*math.pi*t/period))
     walk['hip']={'translate':spine_bezier_timeline(lambda t:{'x':0,'y':bob(t)},times,('x','y'))}
     clamped=0
     leg_cache={}
@@ -352,17 +377,18 @@ def make_skeleton(image,landmarks,parts,settings,masks=None,draw_order=None):
         key=(side,t)
         if key not in leg_cache:
             L1,L2,base_hip=plans[side];_,target,angle=planned(side,t)
-            solved=solve_two_bone(base_hip+np.array([0,bob(t)]),target,L1,L2,bend=-facing)
+            solved=solve_two_bone(base_hip+np.array([0,bob(t)+hip_correction[side]]),target,L1,L2,bend=-facing)
             a=solved['upper_angle'];b=solved['lower_angle']
             upper=side+'-upper-leg';lower=side+'-lower-leg';foot=side+'-foot'
             base1=absposes[upper][1];base2=absposes[lower][1]
-            leg_cache[key]=([norm_angle(a-base1),norm_angle(b-a-(base2-base1)),norm_angle(angle-b-bybone[foot]['rotation'])],solved['clamped'])
+            leg_cache[key]=([norm_angle(a-base1),norm_angle(b-a-(base2-base1)),norm_angle(angle-b-bybone[foot]['rotation'])],solved['clamped'],abs(solved['bend_angle']))
         return leg_cache[key]
     for side,phase in [('l',0),('r',.5)]:
         names=[side+'-'+part for part in ('upper-leg','lower-leg','foot')]
         clamped+=sum(int(leg_pose(side,t)[1]) for t in times)
         for index,name in enumerate(names):
             walk[name]={'rotate':spine_bezier_timeline(lambda t,s=side,i=index:{'value':leg_pose(s,t)[0][i]},times,angular=True)}
+        walk[side+'-upper-leg']['translate']=[{'time':0,'x':0,'y':hip_correction[side]}]
         # Use the actual shoulder-to-hand vertical direction, not the bone's
         # local axis, so projected hand movement opposes the same-side foot.
         hand_delta=points[side+'-hand'][1]-points[side+'-shoulder'][1]
@@ -372,9 +398,40 @@ def make_skeleton(image,landmarks,parts,settings,masks=None,draw_order=None):
         for part,amount in [('upper-arm',12),('lower-arm',5),('hand',2)]:
             walk[side+'-'+part]={'rotate':spine_bezier_timeline(lambda t,d=arm_direction,a=amount,g=arm_gain,p=phase:{'value':d*a*g*math.cos(2*math.pi*(t/period+p))},times,angular=True)}
     walk['torso']={'rotate':spine_bezier_timeline(lambda t:{'value':-2*facing+1.3*math.sin(4*math.pi*t/period)},times,angular=True)}
-    idle['torso']={'rotate':[{'time':0,'value':-1},{'time':1,'value':1},{'time':2,'value':-1}]};idle['hip']={'translate':[{'time':0,'y':0},{'time':1,'y':leg*.008},{'time':2,'y':0}]}
+    idle['torso']={'rotate':[{'time':0,'value':-1},{'time':1,'value':1},{'time':2,'value':-1}]}
+    # Re-solve the standing legs as the body breathes: moving the entire hip
+    # with fixed leg rotations makes both resized soles float in idle.
+    idle_targets={};idle_side_offsets={};idle_offset=float('inf');idle_times=[2*i/64 for i in range(65)]
+    for side in ('l','r'):
+        profile=profiles[side];ankle=points[side+'-ankle'].copy();ankle[0]=points[side+'-hip'][0]
+        angle=profile['flat_angle'] if profile else absposes[side+'-foot'][1]
+        target=sole_target(ankle,profile['points'],angle,{'stance':True,'dx':0,'clearance':0},0,0,facing,
+                           ground if ground is not None else profile['setup_ground_y'])['ankle'] if profile else ankle
+        L1,L2,base_hip=plans[side];idle_targets[side]=(target,angle)
+        idle_side_offsets[side]=target[1]+(L1+L2)*.99-base_hip[1]-leg*.004
+        idle_offset=min(idle_offset,idle_side_offsets[side])
+    idle_correction={s:min(leg*.08 if any(p.get('canvas_anchors') and p.get('group')=='costume' for p in parts) else 0,max(0,v-idle_offset)) for s,v in idle_side_offsets.items()}
+    def idle_bob(t):return idle_offset+leg*.002*(1-math.cos(math.pi*t))
+    idle['hip']={'translate':spine_bezier_timeline(lambda t:{'x':0,'y':idle_bob(t)},idle_times,('x','y'))}
+    def standing(side,t,index):
+        L1,L2,base_hip=plans[side];target,angle=idle_targets[side]
+        pose=solve_two_bone(base_hip+np.array([0,idle_bob(t)+idle_correction[side]]),target,L1,L2,bend=-facing)
+        a,b=pose['upper_angle'],pose['lower_angle'];base1=absposes[side+'-upper-leg'][1];base2=absposes[side+'-lower-leg'][1]
+        return {'value':[norm_angle(a-base1),norm_angle(b-a-(base2-base1)),norm_angle(angle-b-bybone[side+'-foot']['rotation'])][index]}
+    for side in ('l','r'):
+        for i,part in enumerate(('upper-leg','lower-leg','foot')):
+            idle[side+'-'+part]={'rotate':spine_bezier_timeline(lambda t,s=side,index=i:standing(s,t,index),idle_times,angular=True)}
+        idle[side+'-upper-leg']['translate']=[{'time':0,'x':0,'y':idle_correction[side]}]
+    knee_report={}
+    for side in ('l','r'):
+        samples=[(planned(side,t)[0]['stance'],leg_pose(side,t)[2]) for t in times]
+        support=max(v for planted,v in samples if planted);swing=max(v for planted,v in samples if not planted)
+        knee_report[side]={'stance_max_deg':support,'swing_max_deg':swing,
+                           'passed':support<=35 and swing<=50}
     contact={'version':'sole-contact-v1','stance':stance,'stride_length':float(stride),'scene_speed':float(facing*stride/(period*stance)),'facing':settings['facing'],
              'ground_y':ground,'hip_offset':float(max_hip_offset),'unreachable_samples':clamped,
+             'foot_scale':foot_scale,'posture_policy':'natural-walk-v2','requested_lift':requested_lift,'effective_lift':lift,
+             'knee_flexion':knee_report,'requires_posture_review':not all(r['passed'] for r in knee_report.values()),
              'motion_curve':'bezier-hermite-v1','curve_samples':frames,
              'feet':{s:({**{k:v for k,v in p.items() if k!='points'},**({'slot':foot_slots[s]} if s in foot_slots else {})} if p else {'source':'ankle-fallback','requires_visual_review':True}) for s,p in profiles.items()}}
     result={'skeleton':{'spine':'4.2.0','x':round((box[0]-origin[0])*scale,4),'y':round((H-box[3])*scale,4),'width':round((box[2]-box[0])*scale,4),'height':420,'images':'./images/','gait':contact},'bones':bones,'slots':slots,'skins':[{'name':'default','attachments':atts}],'animations':{'idle':{'bones':idle},'walk':{'bones':walk}}}
@@ -428,29 +485,36 @@ class CharacterProject:
         image.thumbnail((1200,1600));data=png_bytes(image);digest=sha(data);folder=self.directory/'images';folder.mkdir(exist_ok=True)
         path=folder/(digest+'.png')
         if not path.exists():path.write_bytes(data)
-        meta=copy.deepcopy(self.meta);meta['source_images']=list(dict.fromkeys([*meta.get('source_images',[]),*([meta['image_id']] if meta.get('image_id') else []),digest]))[-4:];meta['image_id']=digest;meta['masks']={};meta['part_layers']={};meta['part_review']={'adjustments':{},'draw_order':[]};meta['landmarks']=default_landmarks(cut_background(image,meta['settings']['background']));self.save(meta)
+        meta=copy.deepcopy(self.meta);meta['source_images']=list(dict.fromkeys([*meta.get('source_images',[]),*([meta['image_id']] if meta.get('image_id') else []),digest]))[-4:];meta['image_id']=digest;meta['masks']={};meta['part_layers']={};meta['part_review']={'adjustments':{},'draw_order':[]};meta['landmarks']=default_landmarks(cut_background(image,meta['settings']['background']));[meta.pop(k,None) for k in ('canvas_contract','canvas_owners','reconstruction_review','overlap_review','assembly_inputs','assembly_overlays','assembly_pipeline','assembly_completion_history','assembly_invalidations','back_accessory_part','prebind_review')];meta['settings'].pop('background_seeds',None);self.save(meta)
         return self.summary()
 
     def update(self,data):
         self.check(data['revision']);meta=copy.deepcopy(self.meta)
+        if data['landmarks']!=meta['landmarks'] and meta.get('assembly_inputs'):
+            meta['part_layers'].update(copy.deepcopy(meta.pop('assembly_inputs')))
         meta['landmarks']=checked_landmarks(data['landmarks']);meta['settings']=checked_settings(data['settings']);meta['masks']=checked_masks(data.get('masks',self.meta.get('masks',{})))
         names=[n for n,_,_ in segments(meta['landmarks'])];review=meta.get('part_review',{});order=review.get('draw_order',[])
         meta['part_review']={'adjustments':{n:r for n,r in review.get('adjustments',{}).items() if n in names},'draw_order':[n for n in DRAW_ORDER if n in names] if set(order)!=set(names) else order,**({'shoe_cuffs':True} if review.get('shoe_cuffs') else {})}
-        self.save(meta);return self.summary()
+        self.save(meta)
+        from .assembly_pipeline import canonicalize
+        canonicalize(self)
+        from .assembly_pipeline import reconcile_overlays
+        reconcile_overlays(self)
+        return self.summary()
 
     def parts(self):
-        image=self.image() if self.asset_status()['ready'] else self.cutout();key=json.dumps([self.meta['landmarks'],self.meta.get('masks',{}),self.meta.get('part_layers',{}),self.meta.get('part_review',{})],sort_keys=True)
+        image=self.image() if self.asset_status()['ready'] else self.cutout();key=json.dumps([self.meta['landmarks'],self.meta.get('masks',{}),self.meta.get('part_layers',{}),self.meta.get('part_review',{}),self.meta.get('assembly_overlays',[])],sort_keys=True)
         if self.cache.get('parts_key')!=key:
             self.cache['parts']=self.layered_parts(image,self.meta['landmarks'],self.meta.get('masks',{}));self.cache['parts_key']=key
         return self.cache['parts']
 
     def base_parts(self):
-        image=self.image() if self.asset_status()['ready'] else self.cutout();key=json.dumps([self.meta['landmarks'],self.meta.get('masks',{}),self.meta.get('part_layers',{})],sort_keys=True)
+        image=self.image() if self.asset_status()['ready'] else self.cutout();key=json.dumps([self.meta['landmarks'],self.meta.get('masks',{}),self.meta.get('part_layers',{}),self.meta.get('assembly_overlays',[])],sort_keys=True)
         if self.cache.get('base_parts_key')!=key:
             self.cache['base_parts']=self.layered_parts(image,self.meta['landmarks'],self.meta.get('masks',{}),adjust=False);self.cache['base_parts_key']=key
         return self.cache['base_parts']
 
-    def layered_parts(self,image,landmarks,masks,adjust=True):
+    def layered_parts(self,image,landmarks,masks,adjust=True,overlays=True):
         expected={n for n,_,_ in segments(landmarks)}
         layers=self.meta.get('part_layers',{})
         self.require_layer_anchors(layers,landmarks)
@@ -465,26 +529,58 @@ class CharacterProject:
             if not re.fullmatch('[a-f0-9]{64}',digest):raise UserError('完整部件图片编号无效')
             if record.get('source_image_id')!=self.meta['image_id']:raise UserError('完整部件不属于当前角色图')
             sprite=read_image((self.directory/'part-images'/(digest+'.png')).read_bytes())
-            part=aligned_chain(name,sprite,record,landmarks,image.size) if record.get('chain') else aligned_part(name,sprite,record,landmarks,image.size,segments)
+            if 'canvas_offset' in record:
+                from .canvas_layers import placement
+                part=placement(name,sprite,record,landmarks,image.size,segments)
+            else:
+                part=aligned_chain(name,sprite,record,landmarks,image.size) if record.get('chain') else aligned_part(name,sprite,record,landmarks,image.size,segments)
             part['label']=(('左侧' if name.startswith('l-') else '右侧')+('完整手臂' if record['chain']=='arm' else '完整腿与鞋')) if record.get('chain') else LABELS[name]
             if record.get('group')=='costume':part['group']='costume';part['label']='完整衣装'
             originals[name]=part
             for child in record.get('coverage',[name]):
                 if child!=name:originals.pop(child,None);covered.add(child)
         parts=list(originals.values())
+        if overlays and self.meta.get('assembly_overlays'):
+            from .assembly_pipeline import overlay_parts
+            parts=overlay_parts(parts,self.meta['assembly_overlays'])
         if adjust:
             W,H=image.size
-            parts=[apply_adjustment(p,self.meta.get('part_review',{}).get('adjustments',{}).get(p['name'],{}),np.array(landmarks[p['start']])*[W,H]) for p in parts]
+            from .assembly_pipeline import adjust_parts
+            parts=adjust_parts(parts,self.meta.get('part_review',{}).get('adjustments',{}),landmarks,[W,H])
         return parts
 
     def review_order(self,names):
         order=self.meta.get('part_review',{}).get('draw_order',[])
         fallback=COSTUME_DRAW_ORDER if self.meta.get('part_layers',{}).get('torso',{}).get('group')=='costume' else DRAW_ORDER
-        return order if set(order)==set(names) and len(order)==len(names) else [n for n in fallback if n in names]
+        from .assembly_pipeline import overlay_order
+        items=self.meta.get('assembly_overlays',[]);base=set(names)-{x['name'] for x in items}
+        order=[n for n in order if n in base]
+        order=order if set(order)==base and len(order)==len(base) else [n for n in fallback if n in base]
+        return overlay_order(order,items)
+
+    @atomic_assembly
+    def prepare_assembly(self,data):
+        """Execute shared-canvas registration and reviewed foreground extraction."""
+        from .assembly_pipeline import canonicalize,validate_overlays,replace_from_sources
+        self.check(data['revision'])
+        if data.get('replacements'):replace_from_sources(self,data['replacements'])
+        canonicalize(self)
+        if not self.asset_status()['ready']:raise UserError('先补齐独立部件，不能用可见碎片替代补全')
+        meta=copy.deepcopy(self.meta)
+        parts=self.layered_parts(self.image(),meta['landmarks'],meta.get('masks',{}),adjust=False,overlays=False)
+        meta['assembly_overlays']=validate_overlays(parts,data.get('overlays',meta.get('assembly_overlays',[])))
+        if 'back_accessory_part' in data:
+            name=data['back_accessory_part']
+            if name is not None and (name not in ('torso','back') or name not in meta['part_layers']):raise UserError('背包归属须为实际完整部件')
+            meta['back_accessory_part']=name
+        meta['prebind_contract']='complete-assets-v1'
+        meta['assembly_pipeline']={'version':'assembly-execution-v2','steps':['complete-silhouettes','register-common-canvas','preserve-overlap','compose-occlusion'],'automatic':True}
+        for key in ('prebind_review','overlap_review','reconstruction_review'):meta.pop(key,None)
+        self.save(meta);return self.summary()
 
     def review(self):
         image=self.cutout();parts=self.base_parts();W,H=image.size
-        key=json.dumps([self.meta['image_id'],self.meta['landmarks'],self.meta.get('masks',{}),self.meta.get('part_layers',{})],sort_keys=True)
+        key=json.dumps([self.meta['image_id'],self.meta['landmarks'],self.meta.get('masks',{}),self.meta.get('part_layers',{}),self.meta.get('assembly_overlays',[])],sort_keys=True)
         if self.cache.get('review_key')!=key:
             self.cache['quality']={p['name']:component_stats(p['image']) for p in parts};self.cache['review_key']=key
         items=[]
@@ -503,9 +599,123 @@ class CharacterProject:
 
     def update_review(self,data):
         self.check(data['revision']);names=[p['name'] for p in self.base_parts()]
+        if set(data.get('part_review',{}).get('adjustments',{})) & {r['name'] for r in self.meta.get('assembly_overlays',[])}:raise UserError('前景遮挡层跟随源部件，请调整源部件')
         if data.get('part_review',{}).get('shoe_cuffs') and any(r.get('chain')=='leg' for r in self.meta.get('part_layers',{}).values()):raise UserError('连续腿鞋部件已有鞋口，不需要额外鞋沿图层')
         meta=copy.deepcopy(self.meta);meta['part_review']=checked_review(data.get('part_review'),names,self.image().size,DRAW_ORDER)
         self.save(meta);return self.summary()
+
+    def partition_canvas(self,data):
+        from .canvas_layers import partition
+        self.check(data['revision']);items=copy.deepcopy(data.get('layers',[]))
+        for item in items:
+            for field in ('fill_image','mask','completed_image'):
+                if item.get(field):item[field]=read_image(base64.b64decode(item[field],validate=True))
+        layers,_=partition(self.cutout(),items,data.get('draw_order',[]));spec={x['name']:x for x in items}
+        for item in layers:
+            item['image']=base64.b64encode(png_bytes(item['image'])).decode()
+            item.update({k:spec[item['name']][k] for k in ('chain','pins','group','complete') if k in spec[item['name']]})
+        return self.install_canvas_layers({'revision':data['revision'],'layers':layers,'draw_order':data['draw_order']})
+
+    def install_canvas_layers(self,data):
+        from .canvas_layers import ownership, placement
+        self.check(data['revision']);items=data.get('layers')
+        if not isinstance(items,list) or not 1<=len(items)<=16:raise UserError('同坐标图层须为1–16项')
+        owners=ownership(items);meta=copy.deepcopy(self.meta);layers={};prepared=[]
+        for item in items:
+            name=item.get('name')
+            if name not in LABELS or name in layers:raise UserError('同坐标部件名称无效或重复')
+            sprite=read_image(base64.b64decode(item['image'],validate=True)).convert('RGBA')
+            offset=item.get('offset');claims=item['owns'];complete=item.get('complete')
+            if not isinstance(offset,list) or len(offset)!=2 or type(complete)!=bool:raise UserError('须提供整数offset和complete布尔值')
+            record={'canvas_offset':offset,'owns':claims,'complete':complete,'coverage':[name],'source_image_id':meta['image_id'],'mode':'canvas-layer'}
+            if item.get('chain'):
+                chain=item['chain']
+                if chain not in CHAINS or name not in ('l-upper-'+chain,'r-upper-'+chain):raise UserError('同坐标链名称无效')
+                pins=item.get('pins',{})
+                if set(pins)!=set(CHAINS[chain]):raise UserError('同坐标链须提供四个母版像素关节点')
+                W,H=self.image().size
+                for key,point in pins.items():
+                    if not isinstance(point,list) or len(point)!=2 or any(type(v) not in (int,float) or not math.isfinite(v) for v in point) or not (0<=point[0]<=W and 0<=point[1]<=H):raise UserError('母版关节点无效')
+                    meta['landmarks'][name[:2]+key]=[point[0]/W,point[1]/H]
+                record.update(chain=chain,canvas_pins=pins,coverage=[name[:2]+v for v in (('upper-arm','lower-arm','hand') if chain=='arm' else ('upper-leg','lower-leg','foot'))])
+            if item.get('group'):
+                if item['group']!='costume' or name!='torso' or item.get('chain'):raise UserError('完整衣装分组无效')
+                record.update(group='costume',coverage=['torso','pelvis'])
+            if any(set(record['coverage'])&set(r['coverage']) for r in layers.values()):raise UserError('同坐标图层覆盖冲突')
+            self.require_layer_anchors({name:record},meta['landmarks'])
+            placement(name,sprite,record,meta['landmarks'],self.image().size,segments)
+            blob=png_bytes(sprite);digest=sha(blob);record['image_id']=digest;layers[name]=record;prepared.append((digest,blob))
+        expected={n for n,_,_ in segments(meta['landmarks'])};covered={n for r in layers.values() for n in r['coverage']}
+        if expected-covered:raise UserError('同坐标图层缺少部件：'+', '.join(sorted(expected-covered)))
+        order=data.get('draw_order')
+        if not isinstance(order,list) or len(order)!=len(layers) or set(order)!=set(layers):raise UserError('同坐标图层必须提供完整draw_order')
+        meta['part_layers']=layers;meta['part_review']={'adjustments':{},'draw_order':order};meta['canvas_contract']='canvas-layers-v1';meta['canvas_owners']=owners;meta.pop('reconstruction_review',None);meta.pop('overlap_review',None)
+        for key in ('assembly_inputs','assembly_overlays','prebind_review'):meta.pop(key,None)
+        meta['assembly_pipeline']={'version':'assembly-execution-v2','steps':['complete-silhouettes','register-common-canvas','preserve-overlap','compose-occlusion'],'automatic':True}
+        folder=self.directory/'part-images';folder.mkdir(exist_ok=True)
+        for digest,blob in prepared:(folder/(digest+'.png')).write_bytes(blob)
+        self.save(meta);return self.summary()
+
+    def reconstruction(self):
+        from .canvas_layers import reconstruction
+        if self.meta.get('canvas_contract')!='canvas-layers-v1':raise UserError('先导入同坐标图层')
+        parts=self.parts()
+        return reconstruction(self.cutout(),parts,self.review_order([p['name'] for p in parts]),self.meta['canvas_owners'])
+
+    def layer_overlap(self):
+        from .layer_overlap import inspect
+        parts=self.parts()
+        return inspect(self.cutout(),parts,self.review_order([p['name'] for p in parts]),self.meta['landmarks'])
+
+    def finish_parts(self,data):
+        """Scoped, reversible finishing on explicit imported sprites, before rigging."""
+        from .material_finish import finish_material
+        self.check(data['revision']);edits=data.get('edits')
+        if not isinstance(edits,list) or not 1<=len(edits)<=16:raise UserError('提供1–16项部件修整')
+        meta=copy.deepcopy(self.meta);prepared=[];history=[];seen=set()
+        for edit in edits:
+            name=edit.get('part')
+            if name in seen or name not in meta.get('part_layers',{}):raise UserError('部件无效或重复')
+            seen.add(name);record=meta['part_layers'][name];old=record['image_id']
+            image=read_image((self.directory/'part-images'/(old+'.png')).read_bytes())
+            result,report=finish_material(image,edit);blob=png_bytes(result);digest=sha(blob)
+            record['image_id']=digest;prepared.append((digest,blob));history.append({'part':name,'before':old,'after':digest,'report':report})
+        for digest,blob in prepared:(self.directory/'part-images'/(digest+'.png')).write_bytes(blob)
+        meta.setdefault('part_finish_history',[]).append(history)
+        meta.pop('assembly_inputs',None)
+        meta['assembly_overlays']=[r for r in meta.get('assembly_overlays',[]) if r['source'] not in seen]
+        for key in ('prebind_review','reconstruction_review','overlap_review'):meta.pop(key,None)
+        self.save(meta);return self.summary()
+
+    def prebind_evidence(self):
+        from .prebind import inspect
+        return inspect(self)
+
+    def review_prebind(self,data):
+        from .prebind import validate_review
+        self.check(data['revision']);report,_=self.prebind_evidence()
+        review=validate_review(report,data)
+        meta=copy.deepcopy(self.meta);meta['prebind_review']=review;self.save(meta)
+        return self.summary()
+
+    def review_overlap(self,data):
+        from .layer_overlap import CHECKS,require
+        self.check(data['revision']);report,_=self.layer_overlap();review={k:data.get(k) for k in ('digest','checks','verdict','reason')}
+        if review['digest']!=report['digest'] or not isinstance(review['reason'],str) or not review['reason'].strip():raise UserError('请记录当前摆开图的实际观察')
+        if not isinstance(review['checks'],dict) or set(review['checks'])!=set(CHECKS) or any(type(v)!=bool for v in review['checks'].values()):raise UserError('摆开检查须有四项布尔结论')
+        if review['verdict'] not in ('ready','needs_repair'):raise UserError('摆开验收结论无效')
+        if review['verdict']=='ready':require(report,review)
+        meta=copy.deepcopy(self.meta);meta['overlap_review']=review;self.save(meta);return self.summary()
+
+    def review_reconstruction(self,data):
+        from .canvas_layers import require,CHECKS
+        self.check(data['revision']);report,_,_=self.reconstruction();review={k:data.get(k) for k in ('digest','checks','verdict','reason')}
+        if not isinstance(review['reason'],str) or not review['reason'].strip():raise UserError('请记录拼回原图的实际观察')
+        if not isinstance(review['checks'],dict) or set(review['checks'])!=set(CHECKS) or any(type(v)!=bool for v in review['checks'].values()):raise UserError('须记录四项布尔视觉结论')
+        if review['verdict'] not in ('ready','needs_repair'):raise UserError('拼回验收结论无效')
+        if review['verdict']=='ready':require(report,review)
+        elif review['digest']!=report['digest']:raise UserError('拼回资源已变化')
+        meta=copy.deepcopy(self.meta);meta['reconstruction_review']=review;self.save(meta);return self.summary()
 
     def apply_part_layout(self,data,job,image):
         """Use explicit visually reviewed crops, including connected limb chains."""
@@ -524,9 +734,12 @@ class CharacterProject:
         missing=sorted(set(layers)-{n for n,_,_ in segments(landmarks)})
         if missing:raise UserError('导入部件缺少定位点，不能静默丢弃：'+', '.join(missing)+'；请先通过 guide 标注对应位置（后发或背部配件使用 back）')
 
+    @atomic_assembly
     def _apply_reviewed_layout(self,data,image,provenance):
         items=extract_parts(image,data.get('parts'),LABELS,self.meta['settings']['background'])
-        meta=copy.deepcopy(self.meta);layers=meta.setdefault('part_layers',{});W,H=self.image().size;prepared=[]
+        meta=copy.deepcopy(self.meta)
+        previous_group=meta.get('part_layers',{}).get('torso',{}).get('group')
+        layers=meta.setdefault('part_layers',{});W,H=self.image().size;prepared=[]
         self.require_layer_anchors({**layers,**{name:record for name,_,record in items}},meta['landmarks'])
         for name,sprite,record in items:
             if provenance.get('mode')=='reviewed-layout':
@@ -553,8 +766,22 @@ class CharacterProject:
         for digest,blob in prepared:
             path=folder/(digest+'.png')
             if not path.exists():path.write_bytes(blob)
-        meta['part_review']={'adjustments':{},'draw_order':[]}
-        self.save(meta);return self.summary()
+        # Preserve unrelated registered pixels, offsets and foreground recipes.
+        changed={name for name,_,_ in items};available=set(layers)
+        review=meta.setdefault('part_review',{'adjustments':{},'draw_order':[]})
+        review['adjustments']={n:v for n,v in review.get('adjustments',{}).items() if n in available and n not in changed}
+        review['draw_order']=[n for n in review.get('draw_order',[]) if n in available]
+        if previous_group!=layers.get('torso',{}).get('group'):review['draw_order']=[]
+        meta['assembly_inputs']={n:v for n,v in meta.get('assembly_inputs',{}).items() if n in available and n not in changed}
+        for key in ('prebind_review','overlap_review','reconstruction_review'):meta.pop(key,None)
+        self.save(meta)
+        from .assembly_pipeline import canonicalize
+        canonicalize(self)
+        from .assembly_pipeline import reconcile_overlays
+        reconcile_overlays(self)
+        if data.get('assembly_plan'):
+            self.prepare_assembly({**data['assembly_plan'],'revision':self.meta['revision']})
+        return self.summary()
 
     def asset_status(self):
         """Structural completeness only; actual assembly still needs visual review."""
@@ -629,6 +856,8 @@ class CharacterProject:
         self.check(data['revision']);name=data.get('name')
         if name not in LABELS:raise UserError('部件名称无效')
         meta=copy.deepcopy(self.meta);layers=meta.setdefault('part_layers',{});removed=layers.pop(name,{})
+        meta.pop('assembly_inputs',None)
+        meta['assembly_overlays']=[r for r in meta.get('assembly_overlays',[]) if name not in (r['source'],r['subject'])]
         reset_chain=bool(removed.get('chain'))
         for old,record in list(layers.items()):
             if name in record.get('coverage',[]):layers.pop(old);reset_chain=True
@@ -665,9 +894,26 @@ class CharacterProject:
         existing=next((v for v in self.meta['versions'] if v['id']==nonce),None)
         if existing:return self.summary()
         self.check(data['revision']);landmarks=checked_landmarks(data['landmarks']);settings=checked_settings(data['settings']);masks=checked_masks(data.get('masks',self.meta.get('masks',{})));im=guide_cutout(self.image(),landmarks,masks,settings);parts=self.layered_parts(im,landmarks,masks)
+        if self.meta.get('canvas_contract')=='canvas-layers-v1' and self.meta.get('prebind_contract')!='complete-assets-v1':
+            from .canvas_layers import reconstruction,require
+            report,_,_=reconstruction(self.cutout(),parts,self.review_order([p['name'] for p in parts]),self.meta['canvas_owners'])
+            review_record=self.meta.get('reconstruction_review',{})
+            if data.get('draft') is True:
+                if review_record.get('digest')!=report['digest']:raise UserError('草稿也须先记录当前拼回验收')
+            else:
+                require(report,review_record)
+                from .layer_overlap import require as require_overlap
+                require_overlap(self.layer_overlap()[0],self.meta.get('overlap_review'))
+                if any(not p.get('complete') for p in parts):raise UserError('仍有不完整图层，只能交付草稿')
+        if self.meta.get('prebind_contract')=='complete-assets-v1':
+            if landmarks!=checked_landmarks(self.meta['landmarks']) or settings!=checked_settings(self.meta['settings']) or masks!=checked_masks(self.meta.get('masks',{})):raise UserError('先保存当前定位与设置，再重新验收三项素材图')
+            from .prebind import require
+            require(self.prebind_evidence()[0],self.meta.get('prebind_review'))
         review=checked_review({'adjustments':self.meta.get('part_review',{}).get('adjustments',{}),'draw_order':self.review_order([p['name'] for p in parts])},[p['name'] for p in parts],im.size,DRAW_ORDER)
         if self.meta.get('part_review',{}).get('shoe_cuffs'):review['shoe_cuffs']=True
         skeleton=make_skeleton(im,landmarks,parts,settings,masks,review['draw_order'])
+        if self.meta.get('back_accessory_part'):
+            skeleton['skeleton']['assembly_features']={'back_accessory_part':self.meta['back_accessory_part']}
         render_parts=parts
         if review.get('shoe_cuffs'):
             from .ankle_join import add_cuffs
@@ -690,6 +936,10 @@ class CharacterProject:
                 if not path.is_file() or sha(path.read_bytes())!=turnaround['sha256']:raise UserError('三视图来源已变化，请重新验收')
                 reference=read_image(path.read_bytes());materials.append({'id':'turnaround','name':'已审查的正侧背三视图','sha':rig.put_blob(path.read_bytes()),'width':reference.width,'height':reference.height})
                 rig.meta['turnaround_reference']=copy.deepcopy(turnaround)
+            if self.meta.get('canvas_contract'):
+                rig.meta['canvas_layers']={'contract':self.meta['canvas_contract'],'character_id':self.id,'source_image_id':self.meta['image_id'],'owners':copy.deepcopy(self.meta['canvas_owners']),'canvas_size':list(im.size),'layers':copy.deepcopy(self.meta['part_layers']),'assembly_overlays':copy.deepcopy(self.meta.get('assembly_overlays',[])),'assembly_pipeline':copy.deepcopy(self.meta.get('assembly_pipeline')),'overlap_review':copy.deepcopy(self.meta.get('overlap_review')),'review':copy.deepcopy(self.meta.get('reconstruction_review')),'draft':data.get('draft') is True}
+            from .assembly_source import snapshot
+            rig.meta['assembly_source']=snapshot(self.id,self.meta,landmarks,settings,masks,review,render_parts)
             rig.meta['material_sources']=materials;atomic_json(rig.directory/'rig.json',rig.meta)
             meta=copy.deepcopy(self.meta);meta.update(landmarks=landmarks,settings=settings,masks=masks)
             generator='reviewed-chain-v1' if any(r.get('chain') for r in meta.get('part_layers',{}).values()) else 'occlusion-fill-v1' if any(r.get('mode')=='occlusion-fill' for r in meta.get('part_layers',{}).values()) else 'complete-parts-v1' if meta.get('part_layers') else 'chain-mesh-v2'

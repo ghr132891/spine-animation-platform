@@ -158,7 +158,15 @@ def chain_mesh(part,bones,absposes,scale,origin,H):
         u,v=col/nx,row/ny;uv.extend([u,v]);p=np.array([x0+u*(x1-x0),y0+v*(y1-y0)])
         sample=inverse@(p-transform['offset']) if transform else p
         a=blend(sample,pts[1],pts[0],width1);b=blend(sample,pts[2],pts[1],width2);weights=[1-a,a*(1-b),a*b]
-        active=[(bone,w) for bone,w in zip(bind,weights) if w>1e-7];vertices.append(len(active))
+        active=[(bone,w) for bone,w in zip(bind,weights) if w>1e-7]
+        if part['chain']=='leg' and 'hip' in names:
+            # Waist overlap belongs to the pelvis. Blend into thigh motion below
+            # the reviewed hip pin, preserving every setup world position.
+            axis=pts[1]-pts[0];length2=max(float(axis@axis),1.)
+            t=float(np.clip(((sample-pts[0])@axis)/length2/.28,0,1))
+            thigh=t*t*(3-2*t);active=[(bone,w*thigh) for bone,w in active if w*thigh>1e-7]
+            if 1-thigh>1e-7:active.append(('hip',1-thigh))
+        vertices.append(len(active))
         q=np.array([(p[0]-origin[0])*scale,(H-p[1])*scale])
         for bone,w in active:
             bp,angle=absposes[bone];delta=q-bp;r=math.radians(-angle);c,s=math.cos(r),math.sin(r)

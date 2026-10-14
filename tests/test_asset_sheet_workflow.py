@@ -15,6 +15,7 @@ from app.core import UserError, png_bytes, read_image
 from app.rig import RigProject
 from app.image_preflight import JOINTS
 from app.asset_integrity import ASSEMBLY_CHECKS
+from app.orientation_review import ASSEMBLY_CHECKS as ORIENTATION_CHECKS
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -57,6 +58,14 @@ def assembly_guide():
     return guide
 
 
+def accept_fixture_prebind(character):
+    """Synthetic test artwork has explicit complete silhouettes and overlaps."""
+    report,_=character.prebind_evidence()
+    character.review_prebind({'revision':character.meta['revision'],'digest':report['digest'],
+        'checks':dict.fromkeys(report['checks'],True),'verdict':'ready',
+        'reason':'Synthetic fixture: complete separate limbs and overlapping joints.'})
+
+
 class AssetSheetWorkflowTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -94,8 +103,12 @@ class AssetSheetWorkflowTests(unittest.TestCase):
             raise AssertionError(route)
         if action == 'apply-source-layout':
             return character.apply_source_layout(data)
+        if action == 'prepare-assembly':
+            return character.prepare_assembly(data)
         if action == 'build':
             return character.build(self.storage, data)
+        if action == 'review-prebind':
+            return character.review_prebind(data)
         if action == 'generate-parts' and self.allow_mock_generation:
             return [{'id': 'mock-only', 'status': 'pending'}]
         if action is None:
@@ -111,7 +124,7 @@ class AssetSheetWorkflowTests(unittest.TestCase):
                 'observed_view': '同一相机的七片角色素材', 'target_view': '朝右轻微三分之四视角',
                 'target_actions': ['idle', 'walk'], 'missing_parts': [],
                 'camera_view':'three-quarter-side','direction_consistent':True,
-                'material_checks':dict.fromkeys(ASSEMBLY_CHECKS,True),'joint_review':{key:True for key in JOINTS},
+                'orientation_checks':dict.fromkeys(ORIENTATION_CHECKS,True),'material_checks':dict.fromkeys(ASSEMBLY_CHECKS,True),'joint_review':{key:True for key in JOINTS},
                 'reason': '检查实际素材和连接轮廓', 'parts_reviewed': False, **changes}
         return self.tasks.tool(self.task_id, 'spine_assess_image', data)
 
@@ -134,8 +147,16 @@ class AssetSheetWorkflowTests(unittest.TestCase):
     def review_parts(self, **changes):
         return self.tasks.tool(self.task_id,'spine_review_parts',{'id':self.entity,'verdict':'ready',
             'camera_view':'three-quarter-side','direction_consistent':True,
-            'material_checks':dict.fromkeys(ASSEMBLY_CHECKS,True),'joint_review':{key:True for key in JOINTS},'identity_preserved':True,
+            'orientation_checks':dict.fromkeys(ORIENTATION_CHECKS,True),'material_checks':dict.fromkeys(ASSEMBLY_CHECKS,True),'joint_review':{key:True for key in JOINTS},'identity_preserved':True,
             'silhouette_intact':True,'separated':True,'reason':'查看当前素材的完整轮廓、两侧连接和分离范围',**changes})
+
+    def test_worker_executes_automatic_reuse_with_owned_source_and_no_generation(self):
+        self.import_source()
+        result=self.action('prepare-assembly',replacements=[{'name':'l-upper-leg','character_id':self.entity}],back_accessory_part='torso')
+        self.assertEqual(result['part_layers']['l-upper-leg']['completion_source']['anchor_mode'],'landmarks')
+        outsider=CharacterProject.create(self.storage,'not owned')
+        with self.assertRaises(UserError):self.action('prepare-assembly',replacements=[{'name':'l-upper-leg','character_id':outsider.id}])
+        self.assert_no_paid_calls()
 
     def test_front_walk_cannot_reach_generation_or_ready_and_does_not_reserve_budget(self):
         self.look()
@@ -195,11 +216,11 @@ class AssetSheetWorkflowTests(unittest.TestCase):
         self.assertEqual(character.meta['image_id'], image_id)
         self.assertEqual(image_path.read_bytes(), source_bytes)
         self.assertEqual(png_bytes(character.image()), source_bytes)
-        torso = character.meta['part_layers']['torso']
+        torso = character.meta['assembly_inputs']['torso']
         crop = read_image((character.directory / 'part-images' / (torso['image_id'] + '.png')).read_bytes())
         self.assertEqual(crop.getpixel((40, 50)), (255, 255, 255, 255))
         for record in character.meta['part_layers'].values():
-            self.assertEqual(record['mode'], 'source-layout')
+            self.assertEqual(record['mode'], 'canvas-layer')
             self.assertEqual(record['source_image_id'], image_id)
             self.assertNotIn('job_id', record)
         self.assertEqual(list((character.directory / 'jobs').glob('*')), [])
@@ -320,6 +341,9 @@ class AssetSheetWorkflowTests(unittest.TestCase):
         self.assertEqual(task['image_preparation'], 'asset-sheet')
         self.assertTrue(self.character().asset_status()['ready'])
         with patch('app.character.split_image', side_effect=AssertionError('Complete crops must be reused')) as split:
+            c=self.character();report=c.prebind_evidence()[0]
+            # Fixture shapes have been inspected; actual worker views are enforced separately.
+            c.review_prebind({'revision':c.meta['revision'],'digest':report['digest'],'checks':dict.fromkeys(report['checks'],True),'verdict':'ready','reason':'Synthetic complete fixture overlaps at shoulders and hips.'})
             self.look()
             self.look('assembly')
             self.assess(parts_reviewed=True)

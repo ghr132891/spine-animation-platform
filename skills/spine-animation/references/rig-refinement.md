@@ -34,6 +34,14 @@
 
 CLI 回退：`refine --task 上一版任务 --requirements "绑定补图并调整摆臂" --parts /绝对路径/parts.json --state /绝对路径/v2-task.json`。parts.json 与 MCP 的 part_images 格式一致，不含令牌或 Base64。后续查询使用同一 state/nonce，避免重复提交。
 
+## 逐侧朝向检查（limb-orientation-v1）
+
+新任务的部件审阅和最终组装 `spine_assess_image(parts_reviewed=true)` 须提供 `orientation_checks` 六项布尔值：`left_arm_mapping/right_arm_mapping/left_palm_facing/right_palm_facing/left_shoe_facing/right_shoe_facing`。左右对应实际 l/r 骨链，不能按格位猜测；整体 direction_consistent 不能替代逐侧检查。
+
+最终每个动作的双臂局部用 `orientation_checks={mapping_correct,palm_facing,wrist_continuity,occlusion_readable}`，双腿局部用 `{shoe_facing,shoe_profile}`；其他局部不需要该字段。鞋的投影须符合目标视角，不强制正面待机改为侧面。远侧手掌允许合理遮挡，检查完整摆动中的可读性，不要求每帧全露。缺项或 false 不能 ready；记录 needs_adjustment/needs_repair 并定向修复。沿用同一复检包与批量记录，不新增生图或重复渲染。
+
+遇到翻掌先对照原裁片、肩肘腕 pins、真实加权顶点、世界轴和遮挡顺序，区分左右映射、网格镜像与安装角度问题。按整条链修正，不能只扭手腕、盲目镜像双臂或照搬其他角色角度。保留不对称衣饰和已验收的腿部曲线，再查看组装后的两个动作。真正缺少侧视鞋才走预算内补图，不能旋转正面鞋伪装侧视。
+
 ## 摆臂节拍检查
 
 编辑动画时按目标 runtime 写曲线：Spine 4.2 的 rotate 关键帧使用 `value`，Spine 3.8 使用 `angle`。不能跨版本照搬字段。先从匹配版本 runtime 的 parsed timeline 和世界空间采样确认曲线被读取、目标移动部位确实变化；顶点有限、循环首尾相等或 JSON 已加载，都可能同时发生在一条被忽略而静止的动画上。静态待机部位无需强行运动，但用户要求行走或摆臂的部位不能仅凭结构校验交付。
@@ -66,3 +74,18 @@ CLI 回退：`refine --task 上一版任务 --requirements "绑定补图并调�
 把预览里的具体问题用于下一次 `spine_refine`，只改对应骨骼、遮挡、贴图或动作，沿用已验收素材与版本链。匹配 runtime 的结构与数值校验、真实动作采样、视觉复查分别给结论，不把任何一项作为其他项目已通过的证明。
 
 CLI 回退：`gait --task 任务 --animation walk --request /绝对路径/gait.json`，gait.json 提供 anchor、pairs、可选 axis。此操作只读，不生图、不改动作。
+
+
+自然行走使用平台 natural-walk-v2：鞋部等比缩放，默认 foot_scale=0.9（需忠实保留参考鞋尺寸时设1），按原图／三视图比例复核，不能把夸张靴子一律缩成普通鞋。guide.settings 可显式设置 foot_scale=0.65–1.2。默认 lift=0.035，自然行走实际上限0.04；平台将步伐中心放在髋下，并同步求解待机接地。不要通过旋转曲线硬截断膝角，这会导致滑步或悬空。spine_contact 现在按实际髋—膝—踝坐标给出 knee_flexion 和 posture_checks_passed，支撑35°／摆动50°是自然行走预警线，不适用于跑跳；新模板超过阈值须修正或交付待修草稿。先复用已有贴图，检查膝位、骨长和左右长度差；数值通过后仍须看待机8帧、行走32帧及鞋口、膝部局部。旧版本不会被静默覆盖。
+
+### 颈口、裤腰与背包专项复检
+
+- 新任务 `assembly-connections-v1` 使用整批复检包，额外查看 `__hip__`（行走32帧、待机8帧）和存在时的 `__back__`（8帧）；head 同时检查颈口。读取真实面板后逐项记录 `connection_checks`。
+- head：`neck_pin_aligned`、`collar_occlusion`；__hip__：`waist_continuity`、`hip_overlap`、`root_stable`；__back__：`worn_camera`、`strap_face_inward`、`attachment_stable`。布尔值不可批量默认 true；失败保留草稿，修改后旧摘要失效。
+- 颈口使用真实开口作为对齐点，保留前领遮挡。裤腰只由一块连续素材负责，腿根由髋部控制并向下平滑过渡，避免迈步拉开上缘；还须检查口袋/缝线/色差，权重稳定不等于图面无缝。
+- 背包用同视角的穿戴侧面，肩带贴向服装，外袋朝外。错误贴背视图不能仅靠镜像修好；优先裁用原图正确可见面，完整暴露区域缺失才考虑补图。
+- `__hip__`/`__back__` 的 material_checks 使用 connection_overlap/layer_separation/silhouette_valid/edge_clean。与接地和整段动画复检一起完成，不以单帧成功代替循环验收。
+
+
+assembly-connections-v2（新任务）：保留v1字段，__hip__另需 texture_continuity（自然裤料、无镜像/重复条带）及 upper_edge_covered（安装上缘在所有动作中被正确覆盖）；__back__另需 complete_silhouette（包体轮廓无破口）及 occluded_artwork_complete（袖后图面完整）。两区域行走均32帧、待机8帧。旧v1任务按原字段兼容。
+穿戴参考图只能提供可见背包，不能把袖子遮挡区裁成透明洞后当完整素材。先检查独立部件，再检查摆臂极值下的组合；缺失图面用预算内完整配件补图，不盲目扩大、镜像或抹除浅色。裤腰与口袋只属于一块连续主素材，腿根在其后重叠；禁止重复平铺裤料、全宽渐隐和新增透明缝来掩盖错误。数值接地通过不认证这些美术问题。

@@ -66,6 +66,10 @@ class JobHistory:
                         job.pop('failure',None)
                     else:
                         failure=classify_provider_failure(result,category='empty_output')
+                        errors=[str(o.get('error','')) for o in data.get('outputs',[]) if isinstance(o,dict) and o.get('item_status')=='failed' and isinstance(o.get('error'),str)]
+                        if errors:
+                            detail=re.sub(r'https?://[^\s]+','[URL]',errors[0])[:240]
+                            if 'base64' not in detail.lower():failure['provider_message']=detail
                         job.update(status='failed',failure=failure,error=failure['message']+' '+failure['next_action'])
                 elif job['status']=='failed':
                     failure=classify_provider_failure(result,category='generation_failed')

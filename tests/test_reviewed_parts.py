@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'storage/characters/5f2902913f5d4c3aaa8b36b76d37e21e'
 SHEET_ID = '2e800ae34aa1526f8f097c74a3d2ead6'
 SHEET = SOURCE / 'jobs' / (SHEET_ID + '.png')
-NODE = shutil.which('node') or '/Users/tu/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node'
+NODE = shutil.which('node') or 'node'
 
 
 def arm_item(side='l'):
@@ -257,6 +257,7 @@ class ReviewedCandidateCharacterTests(unittest.TestCase):
                     self.assertNotIn(side + '-' + child, attachments)
                 a = attachments[name][name]; offset = 0; allowed = {
                     side + '-' + k for k in (('upper-arm', 'lower-arm', 'hand') if chain == 'arm' else ('upper-leg', 'lower-leg', 'foot'))}
+                if chain == 'leg':allowed.add('hip')
                 sole_points = 0
                 for i in range(len(a['uvs']) // 2):
                     n = a['vertices'][offset]; vals = a['vertices'][offset+1:offset+1+n*4]; offset += 1+n*4
@@ -274,7 +275,7 @@ class ReviewedCandidateCharacterTests(unittest.TestCase):
         files, _ = rig.files(); folder = self.storage / 'runtime'; folder.mkdir()
         for name, content in files.items():
             path = folder / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(content)
-        if not Path(NODE).exists():self.skipTest('official-runtime node interpreter unavailable')
+        if not shutil.which(NODE):self.skipTest('official-runtime node interpreter unavailable')
         script = '''
 const {runtime,load,pose}=require(process.argv[1]);
 const s=runtime('4.2'),rig=load(s,'4.2',process.argv[2],'skeleton.json','skeleton.atlas');

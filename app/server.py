@@ -29,6 +29,7 @@ from app.automation import AutoReskin
 from app.rig_automation import RigAutomation
 from app.agent_tasks import AgentTasks
 from app.web_workflows import WebWorkflows,WebError
+from app.parts_lab import PartsLab
 
 STORAGE=ROOT/'storage'
 PROJECTS={}
@@ -38,6 +39,7 @@ MATRIX=ImageProvider(STORAGE)
 JOBS=JobHistory(STORAGE,MATRIX)
 CHARACTERS={}
 CHARACTER_JOBS=JobHistory(STORAGE,MATRIX,'characters')
+PARTS_LAB=PartsLab(STORAGE,MATRIX)
 
 
 def get_character(id):
@@ -174,8 +176,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(read_file(ROOT,parts[4],parts[5]),mime='image/png')
             if parts==['api','automation','agent','sources']:
                 return self.send({'access':{'requires_token':AGENT_TASKS.require_token,'mode':'token' if AGENT_TASKS.require_token else 'open'},'projects':AGENT_TASKS.api('/api/projects'),'rigs':AGENT_TASKS.api('/api/rigs'),'characters':AGENT_TASKS.api('/api/characters'),
-                                  'capabilities':['texture-reskin','rig-operations','same-runtime-animation-replacement','mapped-local-bone-curves','character-walk','runtime-validation','runtime-motion-diagnostics','reviewed-part-layout','continuous-limb-mesh','pixel-sole-contact','continuous-limb-prompts','pixel-contact-diagnostics','smooth-gait-curves','simple-result-view','concise-art-prompts','safe-generation-failures','character-asset-sheet-first','side-walk-preparation','joint-reviewed-assembly','polygon-part-crops','neck-seam-closeups','scoped-texture-repair','scoped-material-finish','contrast-material-review','long-hem-secondary-motion','turnaround-reference-review','multi-region-closeups','asset-integrity-review','costume-completion','strict-layer-anchors','garment-occlusion-review','isolated-limb-preview','runtime-preview-cache','parallel-runtime-sampling','platform-review-bundle','scoped-edge-cleanup','durable-task-resume','runtime-sample-cache','grouped-workflow-history','sampled-motion-vision','motion-preview-4-32','gait-phase-diagnostics','rig-supplemental-parts','codex-image-preflight','matrix-reference-view-preparation','matrix-gpt-image-2.5-flare','matrix-reference-cache','server-reference-upload','temporary-reference-tunnel','configurable-image-provider','openai-images-api'],
-                                  'image_generation':{'model':MATRIX.status()['model'],'provider':MATRIX.status().get('provider','matrix'),'reference_transport':MATRIX.status()['reference_transport'],'prompt_version':PROMPT_VERSION,'prompt_style':'concise-positive-artwork','default_preparation':'asset-sheet','generation_budget':{'additional_default':8,'baseline':{'turnaround':1,'character-assets':1},'zero_forbids_all':True},'preparation_contract':'side-parts-v2','walk_camera':'side-or-three-quarter-side','part_review_required':True,'integrity_contract':'asset-integrity-v1','garment_review':{'contract':'garment-occlusion-v1','scope':'generated-long-costume','walk_leg_frames':32,'idle_leg_frames':8,'isolated_is_diagnostic_only':True},'costume_completion_sheet':'costume','missing_layer_anchor':'reject','numeric_checks_certify_visual_quality':False,'seam_review':{'contract':'neck-seam-v1','frames_per_animation':8,'requires_visual_review':True,'scoped_pixel_repair':True,'material_finish':True,'contrast_backgrounds':['light','dark']},'detail_review':{'contract':'articulation-v1','anchors':['head','torso','l-upper-arm','r-upper-arm','l-upper-leg','r-upper-leg','__hair__'],'frames_per_animation_per_anchor':8},'turnaround':{'contract':'three-view-v1','sheet':'turnaround','views':['front','side','back'],'reference_only':True,'shares_generation_budget':True},'asset_sheet':{'sheet':'character-assets','requires_reviewed_layout':True,'source_layout_reuse':True},'failure_policy':{'review_rejection':'stop','unknown_submission':'verify-existing','query_or_download_error':'retry-same-task','visual_quality':'one-budgeted-revision'}},
+                                  'capabilities':['texture-reskin','rig-operations','same-runtime-animation-replacement','mapped-local-bone-curves','character-walk','runtime-validation','runtime-motion-diagnostics','reviewed-part-layout','continuous-limb-mesh','pixel-sole-contact','continuous-limb-prompts','pixel-contact-diagnostics','smooth-gait-curves','simple-result-view','concise-art-prompts','safe-generation-failures','character-asset-sheet-first','side-walk-preparation','joint-reviewed-assembly','polygon-part-crops','neck-seam-closeups','scoped-texture-repair','scoped-material-finish','contrast-material-review','long-hem-secondary-motion','turnaround-reference-review','multi-region-closeups','asset-integrity-review','costume-completion','strict-layer-anchors','garment-occlusion-review','isolated-limb-preview','runtime-preview-cache','parallel-runtime-sampling','platform-review-bundle','scoped-edge-cleanup','per-side-orientation-review','natural-walk-posture','durable-task-resume','runtime-sample-cache','grouped-workflow-history','sampled-motion-vision','motion-preview-4-32','gait-phase-diagnostics','rig-supplemental-parts','codex-image-preflight','matrix-reference-view-preparation','matrix-gpt-image-2.5-flare','matrix-reference-cache','server-reference-upload','temporary-reference-tunnel','configurable-image-provider','openai-images-api','reviewed-occlusion-overlay','assembly-source-snapshot'],
+                                  'assembly_execution':{'version':'assembly-execution-v2','default_on_complete_import':True,'action':'prepare-assembly','reuse_complete_sources':True,'automatic_source_anchors':True,'preserve_unrelated_repairs':True,'atomic_import_and_repair':True,'integrated_backpack_review':True,'prebind_overlays_exported':True},'canvas_layers':{'contract':'canvas-layers-v1','coordinate_system':'source-pixels-y-down','actions':['partition-canvas','install-canvas-layers','reconstruction','review-reconstruction'],'visible_pixels_protected':True,'formal_build_requires_review':True,'complete_silhouette_field':'completed_image','overlap_allowed':True,'spread_review':'layer-overlap'},'image_generation':{'model':MATRIX.status()['model'],'provider':MATRIX.status().get('provider','matrix'),'reference_transport':MATRIX.status()['reference_transport'],'prompt_version':PROMPT_VERSION,'prompt_style':'concise-positive-artwork','default_preparation':'asset-sheet','generation_budget':{'additional_default':8,'baseline':{'turnaround':1,'character-assets':1},'zero_forbids_all':True},'preparation_contract':'side-parts-v2','walk_camera':'side-or-three-quarter-side','part_review_required':True,'integrity_contract':'asset-integrity-v1','garment_review':{'contract':'garment-occlusion-v1','scope':'generated-long-costume','walk_leg_frames':32,'idle_leg_frames':8,'isolated_is_diagnostic_only':True},'costume_completion_sheet':'costume','missing_layer_anchor':'reject','numeric_checks_certify_visual_quality':False,'seam_review':{'contract':'neck-seam-v1','frames_per_animation':8,'requires_visual_review':True,'scoped_pixel_repair':True,'material_finish':True,'contrast_backgrounds':['light','dark']},'connection_review':{'contract':'assembly-connections-v3','walk_head_frames':32,'anchors':['head','__hip__','__back__'],'walk_hip_frames':32,'walk_back_frames':32,'requires_visual_review':True},'detail_review':{'contract':'articulation-v1','anchors':['head','torso','l-upper-arm','r-upper-arm','l-upper-leg','r-upper-leg','__hair__'],'frames_per_animation_per_anchor':8},'turnaround':{'contract':'three-view-v1','sheet':'turnaround','views':['front','side','back'],'reference_only':True,'shares_generation_budget':True},'asset_sheet':{'sheet':'character-assets','requires_reviewed_layout':True,'source_layout_reuse':True},'failure_policy':{'review_rejection':'stop','unknown_submission':'verify-existing','query_or_download_error':'retry-same-task','visual_quality':'one-budgeted-revision'}},
                                   'production_reference':REFERENCE_PROFILE,
                                   'ui':{'create':'/auto.html?new=1','result':'/result.html?rig={id}','editor':'/rig.html?rig={id}&advanced=1'},
                                   'reference_upload':MATRIX.reference_status(),
@@ -186,6 +188,12 @@ class Handler(BaseHTTPRequestHandler):
             if len(parts)==6 and parts[3]=='tasks' and parts[5]=='download':return self.send(AGENT_TASKS.download(parts[4]),mime='application/zip',filename='spine-agent-'+parts[4]+'.zip')
             return self.send({'error':'未找到 Agent 接口'},404)
         if path=='/api/health':return self.send({'ok':True,'app':'spine-reskin'})
+        if len(parts)>=3 and parts[:2]==['api','parts-lab']:
+            if len(parts)==3:return self.send(PARTS_LAB.status(parts[2]))
+            if parts[3]=='files':
+                name='/'.join(parts[4:])
+                return self.send(PARTS_LAB.file(parts[2],name),mime=mimetypes.guess_type(name)[0] or 'application/octet-stream')
+            raise UserError('未找到部件试验接口')
         if path=='/api/provider':return self.send(MATRIX.status())
         if path=='/api/reference-hosting':return self.send(MATRIX.reference_status())
         if path=='/api/automation/openapi.json':
@@ -210,6 +218,12 @@ class Handler(BaseHTTPRequestHandler):
                 if action=='image':return self.send(png_bytes(c.image()),mime='image/png')
                 if action=='cutout':return self.send(png_bytes(c.cutout()),mime='image/png')
                 if action=='review':return self.send(c.review())
+                if action=='prebind':return self.send(c.prebind_evidence()[0])
+                if action in ('prebind-parts','prebind-assembly','prebind-spread'):return self.send(png_bytes(c.prebind_evidence()[1][action.removeprefix('prebind-')]),mime='image/png')
+                if action=='layer-overlap':return self.send(c.layer_overlap()[0])
+                if action=='layer-overlap-image':return self.send(png_bytes(c.layer_overlap()[1]),mime='image/png')
+                if action=='reconstruction':return self.send(c.reconstruction()[0])
+                if action=='reconstruction-image':return self.send(png_bytes(c.reconstruction()[2 if qs.get('view',[''])[0]=='diff' else 1]),mime='image/png')
                 if action=='assembly':return self.send(png_bytes(c.assembly()),mime='image/png')
                 if action=='parts':return self.send([{'name':p['name'],'label':p['label'],'box':p['box'],'pixel_count':p['pixel_count'],'complete':p.get('complete',False)} for p in c.parts()])
                 if action=='part':
@@ -320,6 +334,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def post(self,data):
         parts=urllib.parse.urlparse(self.path).path.strip('/').split('/')
+        if parts[:2]==['api','parts-lab']:
+            import ipaddress
+            if not ipaddress.ip_address(self.client_address[0]).is_loopback:
+                return self.send({'error':'部件路线试验目前由服务器本机管理员执行'},403)
+            if len(parts)==3 and parts[2]=='create':
+                # Fresh instance protects the currently loaded project's page data.
+                project=get_project(str(data.get('template_project_id','')))
+                return self.send(PARTS_LAB.create(get_character(str(data.get('character_id',''))),Project(project.directory),data))
+            if len(parts)==4 and parts[3]=='run':return self.send(PARTS_LAB.start(parts[2],data.get('route')),202)
+            if len(parts)==4 and parts[3]=='review':return self.send(PARTS_LAB.review(parts[2],data))
+            if len(parts)==4 and parts[3]=='probe-bones':return self.send(PARTS_LAB.set_probe_bones(parts[2],data))
+            if len(parts)==4 and parts[3]=='inspect':return self.send(PARTS_LAB.inspect(parts[2],data.get('route')))
+            raise UserError('未找到部件试验操作')
         if parts==['api','provider','configure']:
             import ipaddress
             if not ipaddress.ip_address(self.client_address[0]).is_loopback:
@@ -403,6 +430,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(saved)
                 with c.lock:
                     c.check(data['revision']);image_id=c.meta['image_id'];facing=c.meta['settings']['facing']
+                    if 'character-assets' in sheets and c.meta.get('prebind_contract')!='complete-assets-v1':
+                        meta=dict(c.meta);meta['prebind_contract']='complete-assets-v1';c.save(meta)
                     prompts={s:part_prompt(s,notes[s],facing,include_back,body_layout) for s in sheets}
                     reference_url=character_reference(c,data.get('reference_url'))
                 sheets=selected_sheets(data.get('sheets'))
@@ -466,6 +495,16 @@ class Handler(BaseHTTPRequestHandler):
                     result=c.apply_part_layout(data,job,read_image(CHARACTER_JOBS.path(c.id,job['id']).with_suffix('.png').read_bytes()))
                 elif action=='apply-source-layout':result=c.apply_source_layout(data)
                 elif action=='reset-part':result=c.reset_part(data)
+                elif action=='prebind':return self.send(c.prebind_evidence()[0])
+                elif action=='finish-parts':result=c.finish_parts(data)
+                elif action=='review-prebind':result=c.review_prebind(data)
+                elif action=='layer-overlap':return self.send(c.layer_overlap()[0])
+                elif action=='review-overlap':result=c.review_overlap(data)
+                elif action=='reconstruction':return self.send(c.reconstruction()[0])
+                elif action=='partition-canvas':result=c.partition_canvas(data)
+                elif action=='install-canvas-layers':result=c.install_canvas_layers(data)
+                elif action=='prepare-assembly':result=c.prepare_assembly(data)
+                elif action=='review-reconstruction':result=c.review_reconstruction(data)
                 elif action=='install-source-layers':result=c.install_source_layers(data)
                 elif action=='guide':result=c.update(data)
                 elif action=='review':result=c.update_review(data)

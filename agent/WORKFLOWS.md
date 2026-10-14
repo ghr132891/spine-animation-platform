@@ -201,3 +201,15 @@ spine_review_parts 是任务内后台工具，外部使用者仍通过 spine_sub
 腿形可疑才调用相同摘要/动作/帧数的 spine_closeup(isolated=true) 对照。单腿本体异常查定位和短安装区权重；本体正常查衣装开衩/层级。隔离图不计最终审查。不得照抄蓝裙坐标或用扩大髋部固定区、缩细大腿、全局透明衣裙掩盖问题。编辑后摘要改变须复检。
 
 集中相关编辑再做最终检查，重复相同请求复用PNG及runtime采样缓存；不同只读请求有两路计算上限。诊断只查看疑点，不对所有区域额外生成隔离图。继续同一任务复用素材、额度和nonce，不新建重复生成。新图片仍为亿创GPT Image 2.5 Flare，禁止未经请求切换模型。缓存和并发缩短本地检查时间，不保证亿创排队时长。
+
+## 双臂／双鞋朝向防回归（2026-10-13）
+
+此次蓝甲弓箭兵的双鞋投影不一致、手掌外翻和远侧手掌被遮挡，分别发生在素材准备、整臂安装和动态遮挡阶段。平台新增 `limb-orientation-v1`：新素材流程及带三视图的骨架续作，部件、组装逐侧检查双臂映射／双掌朝向／双鞋朝向，最终逐动作检查腕部连续与远侧可读性。缺失、失败或旧资源的记录无法正式完成；可用草稿照常交付。字段详见 `workflow-instructions.txt`。
+
+优先复用合格裁片，核对真实 pins、网格权重和世界轴后修整整条骨链；不盲目镜像，不把正面鞋旋转成侧视，不要求远侧手在每一帧都完全露出。生成提示词已加入自然下垂袖装、末端朝向及近远侧一致性。检查复用现有复检包并批量提交，不增加生图额度或额外渲染轮次。旧任务不追加强制字段。平台校验记录完整性和资源版本，视觉正确仍需真实看图，不能保证任何输入都自动无瑕疵。
+
+历史任务 `assembly-connections-v2` 须读取复检包里的颈口、`__hip__` 和适用的 `__back__` 面板，并通过 `spine_review_closeup.connection_checks` 逐项记录。腰胯和背包行走32帧，待机8帧；检查包体完整图面与自然裤料过渡，字段见 workflow-instructions。具体字段见 workflow-instructions。平台将腿链上缘绑定到髋部并平滑过渡；提示词要求统一穿戴视角、单一裤腰和衣领开口对齐，避免重复裤腰与背包贴背面朝外。旧任务不追加此门槛。
+
+新 character-assets 生成使用 complete-assets-v1：prebind获取摘要，查看prebind-parts/prebind-assembly/prebind-spread，review-prebind分别记录complete_parts、assembly_matches、spread_intact。全部通过才build，draft不绕过；失败先交付素材阶段图，修订后重新检查。
+
+新任务采用 `assembly-connections-v3`：颈口增加前后领空间关系及实际运行时一致性三项，行走32帧；旧契约兼容。已审查边界的前景遮挡用 `occlusion-overlay` 原生操作复用贴图/网格权重，具体字段见 workflow-instructions 和 seam-review。构建保存 assembly_source，另存保存 derived_from_rig；数值/结构成功不替代美术验收。

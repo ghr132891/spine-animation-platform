@@ -11,7 +11,7 @@ from .core import UserError, atomic_json, sha
 from .rig import RigProject, number, name_value
 
 
-EDIT_ACTIONS = {'bone','add-bone','delete-bone','slot','attachment','delete-attachment',
+EDIT_ACTIONS = {'bone','add-bone','delete-bone','slot','attachment','delete-attachment','occlusion-overlay',
                 'ik','texture','texture-repair','material-finish','recolor','add-part','skeleton','animation','copy-animation'}
 
 
@@ -19,6 +19,7 @@ def clone_rig(source, directory, name=None):
     directory=Path(directory);directory.mkdir(parents=True)
     with source.lock:
         meta=copy.deepcopy(source.meta)
+        meta['derived_from_rig']={'id':source.id,'revision':source.meta['revision']}
         meta.update(id=directory.name, revision=0, history=[], name=name or source.meta['name']+' · 自动化')
         for part in meta['state']['parts']:
             target=directory/'blobs'/(part['sha']+'.png');target.parent.mkdir(exist_ok=True)
@@ -97,6 +98,7 @@ class RigAutomation:
                       'attachment':['skin','slot','attachment'],'delete-attachment':['skin','slot','attachment'],
                       'ik':['name','target','bones'],'texture':['part','image'],'texture-repair':['part','reason'],'material-finish':['part','reason','operations'],'recolor':['part'],
                       'add-part':['name','bone','image'],'skeleton':['skeleton'],'animation':['name'],
+                      'occlusion-overlay':['part','source_slot','subject_slot','name','polygon','reason'],
                       'copy-animation':['source_rig_id','source_animation']}[op['action']]
             missing=[key for key in required if key not in op]
             if missing:raise UserError(op['action']+' 操作缺少参数：'+', '.join(missing)+'。可修正参数并重试；源项目未修改。')

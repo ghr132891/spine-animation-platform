@@ -4,7 +4,7 @@ import argparse,json,os,shutil,subprocess,sys
 from pathlib import Path
 from spine_mcp import Bridge
 
-FILES=('SKILL.md','agents/openai.yaml','references/platform-review.md','references/turnaround-review.md','references/seam-review.md','references/rig-refinement.md','references/image-preparation.md','scripts/install.py','scripts/doctor.py','scripts/spine_mcp.py','scripts/spine_workflow.py')
+FILES=('SKILL.md','agents/openai.yaml','references/platform-review.md','references/turnaround-review.md','references/seam-review.md','references/canvas-layers.md','references/complete-assets.md','references/assembly-execution.md','references/parts-comparison.md','references/rig-refinement.md','references/image-preparation.md','scripts/install.py','scripts/doctor.py','scripts/spine_mcp.py','scripts/spine_workflow.py')
 
 
 def discover_codex():

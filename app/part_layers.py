@@ -71,8 +71,9 @@ def aligned_part(name,image,record,landmarks,size,segments):
     scale=np.linalg.norm(B-A)/np.linalg.norm(b-a);angle=math.atan2(*(B-A)[::-1])-math.atan2(*(b-a)[::-1]);c,s=math.cos(angle),math.sin(angle)
     widen=record.get('width_scale',1 if source_space else 1.35 if kind(name)=='upper-arm' else 1.25 if kind(name)=='lower-leg' else 1)
     matrix=np.array([[c,-s],[s,c]])@np.diag([scale*widen,scale])
-    if kind(name)=='foot' and not source_space:
-        matrix=np.diag((B-A)/(b-a))
+    # Shoes use the same similarity transform as other rigid artwork.
+    # Per-axis division magnifies near-horizontal pins and can even collapse
+    # or mirror a shoe. Sole contact is solved from pixels during animation.
     offset=A-matrix@a
     corners=np.array([[0,0],[image.width,0],[0,image.height],[image.width,image.height]])@matrix.T+offset
     lo=np.floor(corners.min(0)).astype(int);hi=np.ceil(corners.max(0)).astype(int)

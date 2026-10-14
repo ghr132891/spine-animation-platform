@@ -135,7 +135,12 @@ function run(folder,version,animation,options){
       const g=comparableFoot(skeleton,frame,c);
       const p=samplePoints(c.profile,g),cycle=mod(i/options.samples+c.pair.phase),support=cycle<options.stance;
       const touching=p.points.flatMap((xy,id)=>Math.abs(xy[1]-options.ground_y)<=options.contact_tolerance?[id]:[]);
-      const row={phase:i/options.samples,time:t,cycle,support,sole_y:p.y,sole_x:p.x,angle:p.angle,clearance:p.y-options.ground_y,touching};
+      const hip=frame.bones.find(b=>b.name===c.pair.hip),knee=frame.bones.find(b=>b.name===c.pair.knee),foot=frame.bones.find(b=>b.name===c.pair.foot);
+      const ux=knee.x-hip.x,uy=knee.y-hip.y,vx=foot.x-knee.x,vy=foot.y-knee.y;
+      const denominator=Math.hypot(ux,uy)*Math.hypot(vx,vy);
+      if(denominator<1e-8)throw new Unassessed('mapping-is-not-a-continuous-leg');
+      const kneeFlexion=Math.acos(Math.max(-1,Math.min(1,(ux*vx+uy*vy)/denominator)))*180/Math.PI;
+      const row={phase:i/options.samples,time:t,cycle,support,knee_flexion_deg:kneeFlexion,sole_y:p.y,sole_x:p.x,angle:p.angle,clearance:p.y-options.ground_y,touching};
       if(support&&c.previous?.row.support){
         const now=new Set(touching),ids=c.previous.row.touching.filter(id=>now.has(id));c.supportContactCounts.push(ids.length);
         for(const id of ids){const dt=t-c.previous.row.time,error=p.points[id][0]-c.previous.points[id][0]+options.scene_speed*dt;
@@ -178,6 +183,8 @@ function run(folder,version,animation,options){
           maximum_step_slip:c.slipCount?c.slipMaximum:null,rms_step_slip:c.slipCount?Math.sqrt(c.slipSquareSum/c.slipCount):null,maximum_velocity_error:c.slipCount?c.slipSpeedMaximum:null,
           normalized_maximum_velocity_error:c.slipCount?c.slipSpeedMaximum*clip.duration/c.length:null},
         contact_pixel_count_minimum:Math.min(...support.map(r=>r.touching.length)),contact_pixel_count_maximum:Math.max(...support.map(r=>r.touching.length))},
+      knee_flexion:{stance_max_deg:Math.max(...support.map(r=>r.knee_flexion_deg)),swing_max_deg:Math.max(...swing.map(r=>r.knee_flexion_deg)),
+        passed:Math.max(...support.map(r=>r.knee_flexion_deg))<=35&&Math.max(...swing.map(r=>r.knee_flexion_deg))<=50},
       sole_angle:{support_minimum:Math.min(...support.map(r=>r.angle)),support_maximum:Math.max(...support.map(r=>r.angle)),whole_cycle_range:spread(c.rows.map(r=>r.angle))},
       swing:{maximum_lift:Math.max(...swing.map(r=>r.clearance)),normalized_maximum_lift:Math.max(...swing.map(r=>r.clearance))/c.length},
       velocity_difference:{maximum,normalized_maximum:maximum/c.length,worst,keyframe_count:allTimes.length,checked_keyframes:selected.length,epsilon_phase:epsilon,
@@ -196,6 +203,7 @@ function run(folder,version,animation,options){
     support_plane_difference:spread(feet.map(f=>f.support.measured_plane)),
     shared_support_fraction:mean(Array.from({length:options.samples},(_,i)=>contexts.filter(c=>c.rows[i].support).length>=2?1:0)),
     checks:{ground_contact:feet.every(f=>f.checks.ground_contact),shared_scene_speed:feet.every(f=>f.checks.shared_scene_speed),loop:loop.seamless},
+    posture_checks_passed:feet.every(f=>f.knee_flexion.passed),
     numerical_checks_passed:feet.every(f=>f.checks.ground_contact&&f.checks.shared_scene_speed)&&loop.seamless,
     source_sha256:Object.fromEntries(files.map(name=>[name,crypto.createHash('sha256').update(fs.readFileSync(safeFile(folder,name))).digest('hex')])),
     limits:{alpha_threshold:options.alpha_threshold,minimum_foot_weight:.98,contact_tolerance:options.contact_tolerance,normalized_slip_limit:options.normalized_slip_limit,

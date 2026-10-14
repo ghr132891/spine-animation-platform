@@ -292,7 +292,7 @@ class RigProject:
     def summary(self):
         state=self.state;s=state['skeleton'];version=s.get('skeleton',{}).get('spine','')
         return {'id':self.id,'name':self.meta['name'],'revision':self.meta['revision'],'source_id':state['source_id'],'source_revision':state['source_revision'],'version':version,'runtime':version[:3],
-                'skeleton':copy.deepcopy(s),'parts':copy.deepcopy(state['parts']),'material_sources':copy.deepcopy(self.meta.get('material_sources',[])),'history':[{k:v for k,v in h.items() if k!='state'} for h in reversed(self.meta['history'])],'validation':validate_state(state)}
+                'skeleton':copy.deepcopy(s),'parts':copy.deepcopy(state['parts']),'material_sources':copy.deepcopy(self.meta.get('material_sources',[])),'assembly_source':copy.deepcopy(self.meta.get('assembly_source') or {'character_id':self.meta.get('canvas_layers',{}).get('character_id'),'character_revision':None}),'derived_from_rig':copy.deepcopy(self.meta.get('derived_from_rig')),'history':[{k:v for k,v in h.items() if k!='state'} for h in reversed(self.meta['history'])],'validation':validate_state(state)}
 
     def part(self,id):return next(p for p in self.state['parts'] if p['id']==id)
 
@@ -402,6 +402,9 @@ class RigProject:
                 c['target']=data['target'];c['bones']=data['bones'];c['mix']=number(data.get('mix',1),0,1)
                 c['softness']=number(data.get('softness',0),0);c['bendPositive']=bool(data.get('bendPositive',True))
                 label='调整 IK：'+c['name']
+            elif action=='occlusion-overlay':
+                from .occlusion_overlay import apply_overlay
+                label=apply_overlay(self,state,data)
             elif action=='add-part':
                 name=safe_name(name_value(data['name']));im=read_image(base64.b64decode(data['image'],validate=True));bone=data['bone']
                 if name in {p['name'] for p in state['parts']} or name in {sl['name'] for sl in s['slots']}:raise UserError('部件或插槽名称已存在')
@@ -458,6 +461,7 @@ class RigProject:
         with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as z:
             for name,data in files.items():z.writestr(name,data)
             for p in self.state['parts']:z.writestr('images/'+safe_name(p['name'])+'.png',self.blob(p))
+            if self.meta.get('canvas_layers'):z.writestr('_canvas-layers.json',json.dumps(self.meta['canvas_layers'],ensure_ascii=False,indent=2))
             z.writestr('_rig-validation.json',json.dumps(report,ensure_ascii=False,indent=2))
             z.writestr('_rig-manifest.json',json.dumps({'source_skeleton_sha':self.meta['source_skeleton_sha'],'source_id':self.state['source_id'],'source_revision':self.state['source_revision'],'revision':self.meta['revision'],'regions':placements},ensure_ascii=False,indent=2))
             z.writestr('README.txt','Spine 骨骼与贴图项目\n导入 skeleton.json，图片路径 ./images/。运行时使用 skeleton.json + skeleton.atlas + rig-page-*.png。\n需使用与 skeleton.spine 对应的 Spine 编辑器 / runtime；本包不包含 .spine 原生工程或 SKEL 转换。\n')

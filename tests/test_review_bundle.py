@@ -20,11 +20,12 @@ class ReviewBundleTests(unittest.TestCase):
    def render(content,clip,count,closeup=None):
     calls.append((clip,count,closeup));return ({'closeup':{'frames':count,'anchor':closeup,'isolated':False}} if closeup else {'passed':True}),png_bytes(Image.new('RGBA',(2,2)))
    a.runtime_check=render;a.contact_check=lambda *args:{'status':'assessed'}
-   first=prepare(a,'rig','id',{});self.assertEqual(len(calls),8);self.assertIn(('walk',32,'l-upper-leg'),calls);self.assertEqual(first['visual_verdict'],'not_reviewed')
+   first=prepare(a,'rig','id',{});self.assertEqual(len(calls),8);self.assertIn(('walk',32,'l-upper-leg'),calls);self.assertIn(('walk',32,'head'),calls);self.assertEqual(first['visual_verdict'],'not_reviewed')
    with patch('app.review_bundle.bundles',RuntimeReports()):
     self.assertEqual(prepare(a,'rig','id',{})['bundle_id'],first['bundle_id']);self.assertEqual(len(calls),8)
    source.state['skeleton']['bones'].append({'name':'torso'})
    self.assertNotEqual(prepare(a,'rig','id',{})['bundle_id'],first['bundle_id']);self.assertEqual(len(calls),18)
+   self.assertTrue(read_file(Path(folder),first['bundle_id'],'p0.png').startswith(b'\x89PNG'))
    with self.assertRaises(UserError):read_file(Path(folder),'../x','p0.png')
    with self.assertRaises(UserError):prepare(a,'rig','id',{'animations':['missing']})
  def test_preparation_alone_cannot_attest(self):
@@ -39,3 +40,25 @@ class ReviewBundleTests(unittest.TestCase):
   entries=[{'animation':'idle','anchor':'head','verdict':'ready','reason':'viewed'},{'animation':'walk','anchor':'head','verdict':'ready','reason':'not viewed'}]
   with self.assertRaises(UserError):a.tool('task','spine_review_regions',{'kind':'rig','id':'id','reviews':entries})
   self.assertTrue(all('review' not in t['closeup_checks']['rig:id']['regions']['idle']['head'] for t in saved))
+
+class BackpackSamplingTests(unittest.TestCase):
+ def test_backpack_occlusion_uses_32_walk_samples(self):
+  with tempfile.TemporaryDirectory() as folder,patch('app.review_bundle.renderer_signature',return_value='back-v2'),patch('app.review_bundle.bundles',RuntimeReports()):
+   source=FakeSource();source.state['skeleton']['bones'].append({'name':'torso'});source.state['skeleton']['slots']=[{'name':'back'}]
+   a=object.__new__(AgentTasks);a.root=Path(folder);a.loaders={'rig':lambda id:source};calls=[]
+   def render(content,clip,count,closeup=None):
+    calls.append((clip,count,closeup));return {'closeup':{'frames':count}},png_bytes(Image.new('RGBA',(2,2)))
+   a.runtime_check=render;a.contact_check=lambda *args:{'status':'assessed'}
+   prepare(a,'rig','id',{})
+   self.assertIn(('walk',32,'__back__'),calls);self.assertIn(('idle',8,'__back__'),calls)
+
+ def test_integrated_backpack_is_in_default_bundle(self):
+  with tempfile.TemporaryDirectory() as folder,patch('app.review_bundle.renderer_signature',return_value='integrated-back-v2'),patch('app.review_bundle.bundles',RuntimeReports()):
+   source=FakeSource();source.state['skeleton']['bones'].append({'name':'torso'});source.state['skeleton']['slots']=[{'name':'torso'}]
+   source.state['skeleton']['skeleton']={'assembly_features':{'back_accessory_part':'torso'}}
+   a=object.__new__(AgentTasks);a.root=Path(folder);a.loaders={'rig':lambda id:source};calls=[]
+   def render(content,clip,count,closeup=None):
+    calls.append((clip,count,closeup));return {'closeup':{'frames':count}},png_bytes(Image.new('RGBA',(2,2)))
+   a.runtime_check=render;a.contact_check=lambda *args:{'status':'assessed'}
+   prepare(a,'rig','id',{})
+   self.assertIn(('walk',32,'__back__'),calls);self.assertIn(('idle',8,'__back__'),calls)

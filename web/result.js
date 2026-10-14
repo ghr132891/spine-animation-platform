@@ -9,14 +9,18 @@ function option(value,text){const item=document.createElement('option');item.val
 function controls(){const animation=$('animation').value;return {type:'controls',animation:animation==='__setup__'?'':animation,setup:animation==='__setup__',skin:$('skin').value,speed:Number($('speed').value),paused:state.paused||animation==='__setup__',bones:false,mirrored:state.mirrored,showInfluence:false,selectedBone:''}}
 function sendControls(){if(state.ready)$('viewer').contentWindow?.postMessage(controls(),location.origin);$('play').textContent=state.paused?'播放':'暂停';$('play').disabled=$('animation').value==='__setup__';$('direction').setAttribute('aria-pressed',String(state.mirrored));$('direction').textContent=state.mirrored?'恢复朝向':'左右翻转'}
 function saveAnimation(){if(!state.rig)return;const url=new URL(location.href);url.searchParams.set('rig',state.rig.id);url.searchParams.set('animation',$('animation').value);if($('skin').value)url.searchParams.set('skin',$('skin').value);url.searchParams.delete('advanced');history.replaceState(null,'',url);$('edit').href='rig.html?rig='+state.rig.id+'&animation='+encodeURIComponent($('animation').value)+'&skin='+encodeURIComponent($('skin').value)+'&advanced=1'}
-function showEmpty(title,help){$('refine-form').hidden=true;$('empty-title').textContent=title;$('empty-help').textContent=help;$('empty').hidden=false;$('viewer').hidden=true;$('controls').hidden=true;$('more').hidden=true;$('download').hidden=true;$('edit').hidden=true}
+function showEmpty(title,help){$('source-info').hidden=true;$('refine-form').hidden=true;$('empty-title').textContent=title;$('empty-help').textContent=help;$('empty').hidden=false;$('viewer').hidden=true;$('controls').hidden=true;$('more').hidden=true;$('download').hidden=true;$('edit').hidden=true}
 async function load(id){
  const sequence=++state.loadSequence;state.ready=false;
  if(!validId(id)){state.rig=null;document.body.setAttribute('aria-busy','false');notice('这个动画链接无效，请从下方已保存动画中选择。');showEmpty('没有找到这套动画','可以选择已保存动画，或上传图片制作新动画。');return}
  notice('');document.body.setAttribute('aria-busy','true');showEmpty('正在打开动画','稍等一下，动画马上出现。');
  try{
   const rig=await api('/api/rigs/'+id);if(sequence!==state.loadSequence)return;if(!validId(rig.id)||!['3.8','4.2'].includes(rig.runtime))throw Error('这个动画版本暂时无法预览，请打开“调整细节”检查');
-  state.rig=rig;state.mirrored=false;$('name').textContent=displayName(rig.name);$('rig-select').value=id;
+  state.rig=rig;state.mirrored=false;
+  const source=rig.assembly_source,sourceInfo=$('source-info');sourceInfo.replaceChildren();sourceInfo.hidden=false;
+  sourceInfo.append('动画版本 '+rig.revision+'。');
+  if(validId(source?.character_id)){const link=document.createElement('a');link.href='character.html?character='+source.character_id+'&view=assembly';link.textContent='查看来源素材';sourceInfo.append(link,Number.isInteger(source.character_revision)?'（生成时版本 '+source.character_revision+'）':'（旧版未记录生成时版本）');sourceInfo.append('。素材校准与另存动画不会自动互相同步。')}
+$('name').textContent=displayName(rig.name);$('rig-select').value=id;
   const animations=Object.keys(rig.skeleton.animations||{}),desired=new URLSearchParams(location.search).get('animation');
   $('animation').replaceChildren(...animations.map(name=>option(name,({idle:'待机',walk:'行走',walk_slow:'慢速行走'})[name]||name)),option('__setup__','静态展示'));
   $('animation').value=animations.includes(desired)||desired==='__setup__'?desired:animations.includes('walk')?'walk':animations[0]||'__setup__';

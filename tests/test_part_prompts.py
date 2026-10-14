@@ -163,7 +163,7 @@ class PartPromptPlanningTests(unittest.TestCase):
 
     def test_character_assets_is_one_wide_complete_layout_with_reviewed_crops(self):
         plan = generation_plan({'mode': 'complete-parts', 'sheets': ['character-assets']})
-        self.assertEqual(plan['prompt_version'], 'animation-parts-v15')
+        self.assertEqual(plan['prompt_version'], 'animation-parts-v21')
         self.assertEqual(plan['image_count'], 1)
         self.assertTrue(plan['requires_reviewed_layout'])
         self.assertTrue(plan['requires_visual_review'])
@@ -201,11 +201,11 @@ class PartPromptPlanningTests(unittest.TestCase):
         prompt = part_prompt('character-assets', notes, facing='left')
         self.assertTrue(prompt.startswith('Exactly 4 columns x 2 rows'))
         self.assertIn(notes, prompt)
-        self.assertIn('original face, head orientation, proportions and ONE assembly scale', prompt)
-        self.assertIn('ONE connected silhouette with clear palms and whole shoes', prompt)
+        self.assertIn('face, orientation, reference footwear size and ONE assembly scale', prompt)
+        self.assertIn('arm/palm and leg/shoe stays connected', prompt)
         self.assertIn('Rounded shoulder/hip overlaps and natural elbow/knee contours', prompt)
         self.assertIn('Match the reference character, camera', prompt)
-        self.assertIn('Keep one-sided costume details on their original image side', prompt)
+        self.assertIn('original image-side details', prompt)
         self.assertIn('Complete occluded garment and accessory artwork', prompt)
         self.assertIn('Both shoes pointing LEFT', prompt)
         for side in ('left', 'right'):
@@ -519,7 +519,7 @@ class PartPromptRequestTests(unittest.TestCase):
         self.assertEqual(job['parts'], item['parts'])
         self.assertEqual((job['columns'], job['rows']), (4, 2))
         self.assertTrue(job['requires_reviewed_layout'])
-        self.assertEqual(job['prompt_version'], 'animation-parts-v15')
+        self.assertEqual(job['prompt_version'], 'animation-parts-v21')
         self.assertEqual(job['instructions'], notes)
         self.assertEqual(self.persisted(job), job)
 

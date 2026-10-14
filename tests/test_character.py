@@ -38,9 +38,11 @@ class CharacterTests(unittest.TestCase):
         first=self.c.build(self.storage,data);self.assertEqual(len(first['versions']),1);self.assertEqual(self.c.build(self.storage,data),first)
         version=first['versions'][0];rig=RigProject(self.storage/'rigs'/version['rig_id']);self.assertTrue(rig.validate()['passed']);self.assertEqual(set(rig.state['skeleton']['animations']),{'idle','walk'})
         source=Project(self.storage/'projects'/version['source_id']);self.assertEqual(source.runtime,'4.2')
+        self.assertEqual(rig.summary()['assembly_source']['character_revision'],data['revision']);self.assertEqual(rig.summary()['assembly_source']['character_id'],self.c.id)
         material=rig.summary()['material_sources'][0];self.assertEqual(rig.blob(material),png_bytes(self.image))
         from app.rig_automation import clone_rig
         clone=clone_rig(rig,self.storage/'rigs'/uuid.uuid4().hex);self.assertEqual(clone.blob(material),rig.blob(material));self.assertEqual(clone.state['skeleton'],rig.state['skeleton'])
+        self.assertEqual(clone.summary()['assembly_source'],rig.summary()['assembly_source'])
         with zipfile.ZipFile(io.BytesIO(self.c.export(self.storage,version['id']))) as z:
             self.assertIn('single-image/source.png',z.namelist());self.assertIn('single-image/guide.json',z.namelist());self.assertIn('skeleton.json',z.namelist());self.assertEqual(len([n for n in z.namelist() if n.startswith('images/') and n.endswith('.png')]),16)
         self.c.update({'revision':self.c.meta['revision'],'landmarks':self.landmarks,'settings':{**self.c.meta['settings'],'period':1.7}})

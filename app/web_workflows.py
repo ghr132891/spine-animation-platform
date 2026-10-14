@@ -134,10 +134,10 @@ class WebWorkflows:
         detail=t.get('stage_detail','') if t.get('stage')=='spine_character' else ''
         stage={'waiting_reference':'等待参考图恢复（自动继续）','queued':'排队等待','completed':'制作完成','failed':'本次未完成','cancelled':'已停止','interrupted':'处理已中断'}.get(t['state'])
         if not stage:
-            stage={'generate':'生成角色图片','generate-view':'准备动作所需视角','generate-parts':'准备完整角色部件图','apply-ai':'准备角色图片','apply-part-sheet':'组装角色部件','apply-part-layout':'组装并检查部件','apply-source-layout':'复用原图部件','guide':'定位骨骼与关节','review':'调整部件接合','build':'制作行走动画','foot-layers':'调整脚腿遮挡'}.get(detail)
+            stage={'generate':'生成角色图片','generate-view':'准备动作所需视角','generate-parts':'准备完整角色部件图','apply-ai':'准备角色图片','apply-part-sheet':'组装角色部件','apply-part-layout':'组装并检查部件','apply-source-layout':'复用原图部件','prepare-assembly':'补全并统一装配与遮挡','finish-parts':'修整部件连接边','prebind':'检查部件、试拼与摆开','guide':'定位骨骼与关节','review':'调整部件接合','build':'制作行走动画','foot-layers':'调整脚腿遮挡'}.get(detail)
         if not stage:stage={'spine_context':'读取制作需求','spine_assess_image':'检查视角与连接','spine_review_parts':'检查部件与连接','spine_inspect':'分析角色与骨骼','spine_image':'检查角色外观','spine_wait':'等待图片生成','spine_edit_rig':'调整骨骼与动作','spine_create_rig':'创建骨架','spine_validate':'检查资源','spine_motion':'检查动画画面','spine_gait':'检查摆臂与循环','spine_contact':'测量鞋底接地与滑步'}.get(t.get('stage'),'正在自动制作')
         steps=['准备视角与部件','检查与组装','制作动作','优化与导出']
-        index=0 if detail in ('generate','generate-view','apply-ai') or t.get('stage') in ('spine_context','spine_image','spine_inspect','spine_assess_image') else 1 if t.get('stage')=='spine_review_parts' or detail in ('generate-parts','apply-part-sheet','apply-part-layout','apply-source-layout','guide','review') else 2 if detail in ('build','foot-layers') or t.get('stage') in ('spine_edit_rig','spine_create_rig') else 3
+        index=0 if detail in ('generate','generate-view','apply-ai') or t.get('stage') in ('spine_context','spine_image','spine_inspect','spine_assess_image') else 1 if t.get('stage')=='spine_review_parts' or detail in ('generate-parts','apply-part-sheet','apply-part-layout','apply-source-layout','prepare-assembly','finish-parts','prebind','review-prebind','guide','review') else 2 if detail in ('build','foot-layers') or t.get('stage') in ('spine_edit_rig','spine_create_rig') else 3
         if t['state']=='queued' or t.get('stage') in ('等待后台执行','Codex 自动编排'):index=0
         result=[]
         for a in t.get('artifacts',[]):

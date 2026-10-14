@@ -13,6 +13,7 @@ from pathlib import Path
 from .core import UserError, atomic_json, read_image
 from .runtime_cache import RuntimeReports
 from .seam_review import required_detail_anchors
+from .connection_review import anchors as connection_anchors
 from .asset_integrity import garment_frame_count
 from .material_finish import inspect_alpha
 
@@ -21,7 +22,7 @@ bundles=RuntimeReports(max_bytes=4*1024*1024,max_concurrent=1)
 
 def renderer_signature(root):
     names=['app/review_bundle.py','app/agent_tasks.py','app/material_finish.py','app/seam_review.py',
-           'app/contact_diagnostics.py','tools/render_rig_evidence.py','tools/validate_agent_runtime.cjs','tools/verify_rig_runtime.cjs']
+           'app/connection_review.py','app/contact_diagnostics.py','tools/diagnose_contact.cjs','tools/render_rig_evidence.py','tools/validate_agent_runtime.cjs','tools/verify_rig_runtime.cjs']
     files=[root/n for n in names]+sorted((root/'web/runtime').glob('*/spine-player.js'))
     return hashlib.sha256(b''.join(p.read_bytes() for p in files)).hexdigest()
 
@@ -37,8 +38,8 @@ def prepare(agent,kind,entity,data):
     clips=data.get('animations',list(skeleton.get('animations',{})) or ['__setup__'])
     if not isinstance(clips,list) or not 1<=len(clips)<=8 or len(set(map(str,clips)))!=len(clips) or any(not isinstance(c,str) or c not in skeleton.get('animations',{}) and c!='__setup__' for c in clips):
         raise UserError('请提供1–8个实际且不重复的动作名')
-    anchors=required_detail_anchors(skeleton);digest=resource_digest(content)
-    key=hashlib.sha256(json.dumps([digest,renderer_signature(agent.root),clips,anchors]).encode()).hexdigest()
+    anchors=list(dict.fromkeys(required_detail_anchors(skeleton)+connection_anchors(skeleton)));digest=resource_digest(content)
+    key=hashlib.sha256(json.dumps(['connections-v3',digest,renderer_signature(agent.root),clips,anchors]).encode()).hexdigest()
     folder=agent.root/'storage/review-bundles'/key;folder.mkdir(parents=True,exist_ok=True)
     def compute():
         record=folder/'manifest.json'
@@ -48,7 +49,7 @@ def prepare(agent,kind,entity,data):
         started=time.perf_counter()
         jobs=[(clip,anchor) for clip in clips for anchor in [None,*anchors]]
         def render(job):
-            clip,anchor=job;count=garment_frame_count(clip) if anchor is None or anchor.endswith('-leg') else 8
+            clip,anchor=job;count=garment_frame_count(clip) if anchor is None or (anchor.endswith('-leg') or anchor in ('__hip__','__back__','head')) else 8
             panel_id='p'+str(jobs.index(job));png=folder/(panel_id+'.png');meta=folder/(panel_id+'.json')
             if png.exists() and meta.exists():return json.loads(meta.read_text())
             report,image=agent.runtime_check(content,clip,count,closeup=anchor)

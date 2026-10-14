@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>完整部件对比 · 图片做动画</title>
+<style>body{margin:0;background:#eef3f8;color:#223149;font:16px/1.7 system-ui}header,main{max-width:1200px;margin:auto;padding:24px}header{display:flex;justify-content:space-between;border-bottom:1px solid #ccd8e4}a{color:#315fae}h1{margin:0;font-size:27px}h2{font-size:21px}section{background:#fff;border:1px solid #d9e2ec;border-radius:12px;padding:22px;margin:20px 0}.columns{display:grid;grid-template-columns:1fr 1fr;gap:20px}.columns section{min-width:0}.status{padding:16px;background:#fff5df;border-radius:8px}figure{margin:20px 0}img{max-width:100%;display:block;background:repeating-conic-gradient(#e1e8f0 0% 25%,#f4f6f9 0% 50%) 0/24px 24px;max-height:650px;object-fit:contain;margin:auto}figcaption{font-weight:600;margin-bottom:8px}.muted{color:#65758b;font-size:14px}.error{color:#a13c24}button{padding:8px 16px;background:#315fae;color:white;border:0;border-radius:6px;cursor:pointer}ul{padding-left:22px}@media(max-width:800px){.columns{display:block}header,main{padding:16px}}</style></head>
+<body><header><strong>图片做动画 · 部件验收</strong><a href="/auto.html">返回我的制作</a></header><main>
+<h1>先把部件做好，再制作动画</h1><p class="status" id="summary">正在读取真实试验结果…</p><button id="refresh">刷新结果</button>
+<section><h2>同一人物与结构标准</h2><div class="columns"><figure><figcaption>人物母版</figcaption><img id="master" alt="本次人物参考图"></figure><figure><figcaption>标准部件模板（参考，不是新生成结果）</figcaption><img id="template" alt="从原 atlas 解包的标准部件"></figure></div></section>
+<div class="columns" id="routes"></div><p class="muted">部件完整、试拼、摆开、连接几何和外观均通过后，才可导入后续绑定流程。没有通过的结果也会保留供查看；旧动画不作为本轮新成果。</p></main>
+<script>
+const id=new URLSearchParams(location.search).get('id');const base='/api/parts-lab/'+encodeURIComponent(id||'');
+const states={prepared:'已准备输入',pending:'正在处理',completed:'素材已返回，查看验收结论',failed:'服务返回失败',submission_unknown:'提交状态待核实，不会重复提交',needs_attention:'需要处理',service_unavailable:'服务暂不可用'};
+const file=n=>base+'/files/'+n;let timer;
+function figure(title,name){const f=document.createElement('figure'),c=document.createElement('figcaption'),a=document.createElement('a'),im=document.createElement('img');c.textContent=title;a.href=file(name);a.target='_blank';im.src=file(name);im.alt=title;im.loading='lazy';im.onerror=()=>{im.remove();const p=document.createElement('p');p.textContent='该阶段尚未产生结果';f.append(p)};a.append(im);f.append(c,a);return f}
+async function load(){clearTimeout(timer);try{if(!/^[a-f0-9]{32}$/.test(id||''))throw Error('缺少有效试验编号');const r=await fetch(base);const data=await r.json();if(!r.ok)throw Error(data.error||'读取失败');document.getElementById('master').src=file('master.png');document.getElementById('template').src=file('template.png');const parent=document.getElementById('routes');parent.replaceChildren();const results=[];
+for(const route of ['template','see-through']){const s=document.createElement('section'),h=document.createElement('h2'),state=document.createElement('p');h.textContent=route==='template'?'A · 模板参考生成':'B · See-through 补全分层';s.append(h);const rev=data.reviews?.[route];state.textContent=rev?(rev.verdict==='ready'?'素材验收通过':'素材验收未通过'):(states[data.routes[route]]||data.routes[route]);s.append(state);if(rev){const p=document.createElement('p');p.textContent=rev.reason;s.append(p);results.push(rev.verdict)}
+const job=data.jobs?.[route];if(job?.error||job?.failure){const p=document.createElement('p');p.className='error';const err=job.error||job.failure;p.textContent=typeof err==='string'?err:JSON.stringify(err);s.append(p)}
+const prefix=route==='template'?'':'see-through/';if(route==='template')s.append(figure('实际生成图','candidate.png'));
+for(const [title,name]of [['完整部件','parts.png'],['原位试拼','assembly.png'],[route==='template'?'肩髋正反摆开':'双臂摆开与合并裤层移开诊断','spread.png']])s.append(figure(title,prefix+name));
+const note=document.createElement('p');note.className='muted';note.textContent=route==='template'?'当前接口接受参考图约束，不提供 ControlNet 或精确轮廓锁定。模板网格对新图的裁切也属于失败证据。':'此模型按语义分层；双腿合层时不能视为独立腿部素材。裤层整体移开只用于诊断，不是双腿摆开通过。';s.append(note);
+if(route==='see-through'&&job?.status==='completed'){const a=document.createElement('a');a.href=file('see-through/layers.psd');a.textContent='下载实际返回的分层 PSD';s.append(a)}parent.append(s)}
+document.getElementById('summary').textContent=results.includes('needs_repair')?'本轮部件仍未达到标准，保留两条路线的真实结果，未制作新动画。':'本轮处于素材阶段，完成实际视觉验收前不会进入动画制作。';if(Object.values(data.routes).some(s=>['pending','checking_service','uploaded'].includes(s)))timer=setTimeout(load,12000);
+}catch(e){document.getElementById('summary').textContent=e.message}}
+document.getElementById('refresh').onclick=load;load();
+</script></body></html>

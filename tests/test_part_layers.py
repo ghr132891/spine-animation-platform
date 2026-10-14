@@ -40,10 +40,11 @@ class CompletePartTests(unittest.TestCase):
         self.c.restore({'revision':self.c.meta['revision'],'version':version['id']});self.assertEqual(len(self.c.meta['part_layers']),16)
         self.c.reset_part({'revision':self.c.meta['revision'],'name':'back'});self.assertNotIn('back',self.c.meta['part_layers']);self.assertEqual(len(version['part_layers']),16)
         self.assertEqual(CharacterProject(self.c.directory).meta,self.c.meta)
-    def test_foot_keeps_horizontal_sole_with_exact_joint_anchor_mapping(self):
+    def test_foot_keeps_source_proportions_with_exact_joint_anchor_mapping(self):
         sprite=Image.new('RGBA',(120,100),(25,100,160,255));record={'start_pin':[.3,.18],'end_pin':[.86,.77]}
         part=aligned_part('l-foot',sprite,record,self.c.meta['landmarks'],self.c.image().size,segments);M=np.array(part['placement']['matrix']);offset=np.array(part['placement']['offset'])
-        self.assertAlmostEqual(M[0,1],0);self.assertAlmostEqual(M[1,0],0)
+        self.assertTrue(np.allclose(M.T@M,np.eye(2)*np.linalg.det(M)))
+        self.assertGreater(np.linalg.det(M),0)
         for pin,joint in [('start_pin','l-ankle'),('end_pin','l-toe')]:self.assertTrue(np.allclose(M@(np.array(record[pin])*sprite.size)+offset,np.array(self.c.meta['landmarks'][joint])*self.c.image().size))
 
     def test_default_completion_preserves_original_visible_arm_pixels(self):

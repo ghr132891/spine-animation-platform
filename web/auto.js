@@ -49,7 +49,7 @@ function showArtifact(index){
 $('artifact').onchange=()=>showArtifact(+$('artifact').value);
 function friendlyStage(task){
  if(task.delivery_status==='previous')return terminal.has(task.state)?'修改未完成 · 旧版可看':'修改中 · 旧版可看';
- if(task.delivery_status==='draft')return terminal.has(task.state)?task.is_refinement?'修改未完成 · 草稿可看':'已有修复草稿':'修复中 · 草稿可看';
+ if(task.delivery_status==='draft')return terminal.has(task.state)?'已有交付 · 验收见说明':'修复中 · 草稿可看';
  const completed={waiting_reference:'等待参考图恢复',queued:'排队等待',completed:'制作完成',failed:'本次未完成',cancelled:'已停止',interrupted:'处理已中断'};
  return completed[task.state]||['准备图片','准备角色','制作动作','检查效果'][task.step]||'正在制作';
 }
@@ -62,9 +62,9 @@ function render(task){
  const budget=task.generation_budget||{};if(budget.limit!=null)$('stage-detail').textContent+=' · 基础图 '+(budget.baseline_used_or_reserved||0)+'/'+(budget.baseline_limit||0)+'，补图／修订 '+(budget.used_or_reserved||0)+'/'+budget.limit;
  $('resume').hidden=!['failed','interrupted'].includes(task.state);
  $('attempt-details').hidden=!(task.attempt_count>1);$('attempt-list').replaceChildren();for(const attempt of task.attempts||[]){const li=document.createElement('li');li.textContent=new Date(attempt.created_at*1000).toLocaleString('zh-CN')+' · '+friendlyStage(attempt)+(attempt.error?'：'+attempt.error:'');$('attempt-list').append(li)}
- $('result-title').textContent=task.delivery_status==='previous'?'上次保存的版本':draft?'修复草稿 · 仍有待优化项':task.state==='completed'?'制作完成':'看效果';$('cancel').hidden=terminal.has(task.state);
+ $('result-title').textContent=task.delivery_status==='previous'?'上次保存的版本':draft?'最新交付 · 查看验收说明':task.state==='completed'?'制作完成':'看效果';$('cancel').hidden=terminal.has(task.state);
  for(const [i,item]of [...$('steps').children].entries()){item.classList.toggle('done',task.state==='completed'||i<task.step);item.classList.toggle('current',!terminal.has(task.state)&&i===task.step)}
- $('result-message').textContent=(task.state==='waiting_reference'?'参考图通道暂不可用，平台会自动检测并继续原任务，无需重新生成。'+(task.reference_recovery?.last_error?.error?.message?' 原因：'+task.reference_recovery.last_error.error.message:''):null)||(draft?task.delivery_summary+(task.is_refinement&&task.error&&task.delivery_task_id!==task.id?' 本次修改未完成：'+task.error:''):null)||task.error||(task.state==='completed'?'动画已准备好。看看效果，也可以让 Codex 继续调整。':task.state==='cancelled'?'制作已停止，可以调整需求后重新开始。':'正在后台处理，完成后会显示动画。');
+ $('result-message').textContent=(task.state==='waiting_reference'?'参考图通道暂不可用，平台会自动检测并继续原任务，无需重新生成。'+(task.reference_recovery?.last_error?.error?.message?' 原因：'+task.reference_recovery.last_error.error.message:''):null)||(draft?task.delivery_summary:null)||task.error||(task.state==='completed'?'动画已准备好。看看效果，也可以让 Codex 继续调整。':task.state==='cancelled'?'制作已停止，可以调整需求后重新开始。':'正在后台处理，完成后会显示动画。');
  $('process-detail').hidden=terminal.has(task.state);$('result-description').hidden=!(task.summary||draft&&task.error);$('result-summary').textContent=draft&&task.error?'原自动任务未通过：'+task.error:task.summary||'';$('results').hidden=!hasResult;
  $('refine-form').hidden=!hasResult;$('refine-submit').disabled=state.refining||!terminal.has(task.state);
  if(!state.refining)$('refine-status').textContent=!terminal.has(task.state)?'正在处理，当前草稿仍可查看。':'';

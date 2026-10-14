@@ -2,7 +2,7 @@
 import ast,hashlib,json,re,shutil,sys,zipfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
-VERSION='1.10.0'
+VERSION='1.10.2'
 
 def installer_files():
     tree=ast.parse((ROOT/'skills/spine-animation/scripts/install.py').read_text())

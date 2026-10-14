@@ -35,6 +35,8 @@ class TurnaroundTests(unittest.TestCase):
         require_review(self.tasks.read(self.id),c,'reference')
     def test_build_preserves_current_assembly_review_but_rejects_changed_parameters(self):
         c=self.f.character();c.apply_source_layout({'revision':c.meta['revision'],'parts':self.f.layout})
+        from tests.test_asset_sheet_workflow import accept_fixture_prebind
+        accept_fixture_prebind(c)
         self.f.look();self.f.look('assembly');self.f.assess(source_kind='character',parts_reviewed=True)
         self.look();self.review();self.review(phase='assembly')
         c=self.f.character();settings={**c.meta['settings'],'stride':.3}
@@ -71,6 +73,8 @@ class TurnaroundTests(unittest.TestCase):
         from app.rig import RigProject
         from app.rig_automation import clone_rig
         c=self.f.character();c.apply_source_layout({'revision':c.meta['revision'],'parts':self.f.layout})
+        from tests.test_asset_sheet_workflow import accept_fixture_prebind
+        accept_fixture_prebind(c)
         self.look();self.f.look('assembly');record=self.review(phase='assembly')
         c=self.f.character();c.meta['turnaround_reference']=record;atomic_json(c.directory/'character.json',c.meta)
         result=c.build(self.f.storage,{'revision':c.meta['revision'],'nonce':uuid.uuid4().hex,'landmarks':c.meta['landmarks'],'settings':c.meta['settings']})

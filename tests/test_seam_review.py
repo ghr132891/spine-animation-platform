@@ -41,7 +41,7 @@ class SeamWorkflowTests(unittest.TestCase):
         task=self.tasks.create(self.request());entity=task['sources'][0]['id'];id=task['id'];args={'kind':'rig','id':entity,'animation':'walk','verdict':'ready','reason':'已查看实图'}
         with self.assertRaises(UserError):self.tasks.tool(id,'spine_review_closeup',args)
         with self.assertRaises(UserError):self.tasks.tool(id,'spine_closeup',{'kind':'rig','id':self.rig.id,'animation':'walk'})
-        preview=self.tasks.tool(id,'spine_closeup',{'kind':'rig','id':entity,'animation':'walk'});report=json.loads(preview['content'][0]['text']);self.assertEqual(report['frames'],8)
+        preview=self.tasks.tool(id,'spine_closeup',{'kind':'rig','id':entity,'animation':'walk'});report=json.loads(preview['content'][0]['text']);self.assertEqual(report['frames'],32)
         self.tasks.tool(id,'spine_review_closeup',args)
         rig=self.loaders['rig'](entity);rig.mutate('bone',{'bone':'head','scaleX':1.02,'revision':rig.meta['revision']})
         with self.assertRaises(UserError):self.tasks.tool(id,'spine_review_closeup',args)

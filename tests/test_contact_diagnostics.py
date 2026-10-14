@@ -64,6 +64,14 @@ class ContactDiagnosticsTests(unittest.TestCase):
         (self.folder / 'skeleton.json').write_text(json.dumps(self.source))
         return diagnose_contact(self.folder, self.version, animation, self.options if options is None else options)
 
+    def test_runtime_knee_angle_does_not_trust_declared_length_or_metadata(self):
+        self.source['skeleton']['gait']={'knee_flexion':{'l':{'passed':True}}}
+        self.source['bones'][2]['rotation']=65
+        report=self.diagnose()
+        self.assertEqual(report['status'],'assessed',report)
+        self.assertFalse(report['posture_checks_passed'])
+        self.assertAlmostEqual(report['feet'][0]['knee_flexion']['stance_max_deg'],65,places=4)
+
     def test_actual_opaque_shoe_contact_and_child_offset_length_not_declared_length(self):
         report = self.diagnose()
         self.assertEqual(report['status'], 'assessed', report)

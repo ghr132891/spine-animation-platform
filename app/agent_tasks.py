@@ -24,14 +24,16 @@ from .rig import RigProject
 from .rig_automation import clone_rig
 from .asset_integrity import CONTRACT as INTEGRITY_CONTRACT, checked_material_review, require_material_reviews
 from .image_preflight import checked_assessment,selected_sheets,POLICIES,checked_part_review,require_side_camera,checked_connections
+from .connection_review import CONTRACT as CONNECTION_CONTRACT, CONTRACTS as CONNECTION_CONTRACTS, CHECKS as CONNECTION_CHECKS, checked as checked_connection, require as require_connections
+from .orientation_review import CONTRACT as ORIENTATION_CONTRACT, checked_orientation, require_orientation_reviews, required_checks as orientation_fields
 from .production_reference import REFERENCE_PROFILE
 from .runtime_cache import runtime_reports, runtime_previews
 from .asset_integrity import GARMENT_CONTRACT, garment_anchors, garment_frame_count, checked_garment_review, require_garment_reviews
 
 TERMINAL={'completed','failed','cancelled','interrupted'}
 KINDS={'project':'projects','rig':'rigs','character':'characters'}
-CHAR_ACTIONS={'generate','generate-view','generate-parts','generation-plan','apply-ai','apply-part-sheet',
-              'apply-part-layout','apply-source-layout','guide','review','build','restore','foot-layers','reset-part','refresh-jobs'}
+CHAR_ACTIONS={'prepare-assembly','finish-parts','prebind','review-prebind','layer-overlap','review-overlap','generate','generate-view','generate-parts','generation-plan','apply-ai','apply-part-sheet',
+              'apply-part-layout','apply-source-layout','install-canvas-layers','partition-canvas','review-reconstruction','reconstruction','guide','review','build','restore','foot-layers','reset-part','refresh-jobs'}
 
 
 def nonce(value):
@@ -236,10 +238,13 @@ class AgentTasks(ReferenceRecovery):
                     if '_'+key in data:task[key]=data['_'+key]
                 if preparation=='asset-sheet' and any(s['kind']=='character' for s in clones):
                     task['preparation_contract']='side-parts-v2'
+                    if any(s['kind']=='character' and not self.loaders['character'](s['id']).asset_status()['ready'] for s in clones):task['canvas_contract']='canvas-layers-v1'
                     task['turnaround_contract']='three-view-v1'
                     task['detail_contract']='articulation-v1'
                 if any(s['kind']=='rig' and (self.loaders['rig'](s['id']).meta.get('turnaround_reference') or garment_anchors(self.loaders['rig'](s['id']).state['skeleton'])) for s in clones):task['detail_contract']='articulation-v1'
                 if task.get('detail_contract')=='articulation-v1':
+                    task['orientation_contract']=ORIENTATION_CONTRACT
+                    task['connection_contract']=CONNECTION_CONTRACT
                     task['integrity_contract']=INTEGRITY_CONTRACT
                     task['garment_contract']=GARMENT_CONTRACT
                 atomic_json(path,task);os.chmod(path.parent,0o700)
@@ -367,7 +372,7 @@ class AgentTasks(ReferenceRecovery):
             content=source.export();revision=source.meta['revision'] if kind=='rig' else source.revision
             skeleton=copy.deepcopy(source.state['skeleton'] if kind=='rig' else source.skeleton_data)
         clip=data.get('animation','idle');anchor=data.get('anchor','head')
-        default_count=garment_frame_count(clip) if anchor in garment_anchors(skeleton) else 8
+        default_count=garment_frame_count(clip) if anchor in garment_anchors(skeleton) or anchor in ('__hip__','__back__','head') else 8
         count=frame_count(data.get('frame_count',default_count))
         isolated=data.get('isolated',False)
         if type(isolated) is not bool:raise UserError('isolated 须为布尔值')
@@ -456,7 +461,7 @@ class AgentTasks(ReferenceRecovery):
             if t['state'] not in ('queued','running'):raise UserError('任务已结束，不能继续调用工具')
             if t['calls']>=512:raise UserError('超过工具调用上限')
             t['calls']+=1;t['stage']=name;self.save_tool_state(t)
-            if name=='spine_context':return {'image_generation':self.image_provider_info(),'requirements':t['requirements'],'sources':t['sources'],'owned':t['owned'],'budget':self.summary(id)['generation_budget'],'max_repairs':t['max_repairs'],'edit_budget':{'used':t['edits'],'limit':max(1,len(t['sources']))*(t['max_repairs']+1)},'image_preparation':t.get('image_preparation','preserve'),'image_assessments':t.get('image_assessments',{}),'turnaround_contract':t.get('turnaround_contract'),'turnaround_checks':t.get('turnaround_checks',{}),'integrity_contract':t.get('integrity_contract'),'garment_contract':t.get('garment_contract'),'detail_contract':t.get('detail_contract'),'seam_contract':t.get('seam_contract'),'preparation_contract':t.get('preparation_contract'),'part_checks':t.get('part_checks',{}),'production_reference':copy.deepcopy(REFERENCE_PROFILE),'capabilities':['runtime-motion-diagnostics','reviewed-part-layout','continuous-limb-mesh','pixel-sole-contact','continuous-limb-prompts','pixel-contact-diagnostics','smooth-gait-curves','simple-result-view','concise-art-prompts','safe-generation-failures','character-asset-sheet-first','side-walk-preparation','joint-reviewed-assembly','polygon-part-crops','neck-seam-closeups','scoped-texture-repair','scoped-material-finish','contrast-material-review','turnaround-reference-review','multi-region-closeups','asset-integrity-review','costume-completion','strict-layer-anchors','garment-occlusion-review','isolated-limb-preview','runtime-preview-cache','parallel-runtime-sampling','platform-review-bundle','scoped-edge-cleanup']}
+            if name=='spine_context':return {'image_generation':self.image_provider_info(),'requirements':t['requirements'],'sources':t['sources'],'owned':t['owned'],'budget':self.summary(id)['generation_budget'],'max_repairs':t['max_repairs'],'edit_budget':{'used':t['edits'],'limit':max(1,len(t['sources']))*(t['max_repairs']+1)},'image_preparation':t.get('image_preparation','preserve'),'image_assessments':t.get('image_assessments',{}),'turnaround_contract':t.get('turnaround_contract'),'turnaround_checks':t.get('turnaround_checks',{}),'canvas_contract':t.get('canvas_contract'),'connection_contract':t.get('connection_contract'),'orientation_contract':t.get('orientation_contract'),'integrity_contract':t.get('integrity_contract'),'garment_contract':t.get('garment_contract'),'detail_contract':t.get('detail_contract'),'seam_contract':t.get('seam_contract'),'preparation_contract':t.get('preparation_contract'),'part_checks':t.get('part_checks',{}),'production_reference':copy.deepcopy(REFERENCE_PROFILE),'capabilities':['runtime-motion-diagnostics','reviewed-part-layout','continuous-limb-mesh','pixel-sole-contact','continuous-limb-prompts','pixel-contact-diagnostics','smooth-gait-curves','simple-result-view','concise-art-prompts','safe-generation-failures','character-asset-sheet-first','side-walk-preparation','joint-reviewed-assembly','polygon-part-crops','neck-seam-closeups','scoped-texture-repair','scoped-material-finish','contrast-material-review','turnaround-reference-review','multi-region-closeups','asset-integrity-review','costume-completion','strict-layer-anchors','garment-occlusion-review','isolated-limb-preview','runtime-preview-cache','parallel-runtime-sampling','platform-review-bundle','scoped-edge-cleanup','per-side-orientation-review','natural-walk-posture','assembly-connection-review','reviewed-occlusion-overlay','assembly-source-snapshot']}
             if name=='spine_deliver_draft':return self.publish_draft(id,args['id'],args['summary'])
             if name=='spine_assess_image':
                 entity=args['id'];self.own(t,'character',entity);c=self.loaders['character'](entity)
@@ -469,6 +474,8 @@ class AgentTasks(ReferenceRecovery):
                         raise UserError('肩肘腕／髋膝踝仍有连接问题，修整后重新检查当前组装')
                 if t.get('integrity_contract')==INTEGRITY_CONTRACT and assessment['parts_reviewed']:
                     assessment['material_checks']=checked_material_review(args)
+                if t.get('orientation_contract')==ORIENTATION_CONTRACT and assessment['parts_reviewed']:
+                    assessment['orientation_checks']=checked_orientation(args)
                 if t.get('image_preparation')=='asset-sheet' and assessment['parts_reviewed']:
                     if t.get('assembly_checks',{}).get(entity)!=c.meta['revision']:raise UserError('先查看当前版本的 assembly 组装图，再记录部件已检查')
                     if not c.asset_status()['ready']:raise UserError('完整部件尚未全部接入，请检查缺失部件与连续臂／腿鞋链')
@@ -494,6 +501,8 @@ class AgentTasks(ReferenceRecovery):
                     if t.get('candidate_checks',{}).get(entity+':'+job_id)!=c.meta['image_id']:raise UserError('先实际查看当前候选部件图再检查部件')
                 elif t.get('image_checks',{}).get(entity)!=c.meta['image_id']:raise UserError('先实际查看当前原部件图')
                 review=checked_part_review(args)
+                if t.get('orientation_contract')==ORIENTATION_CONTRACT:
+                    review['orientation_checks']=checked_orientation(args)
                 if t.get('integrity_contract')==INTEGRITY_CONTRACT:
                     review['material_checks']=checked_material_review(args)
                     if job_id:
@@ -534,7 +543,7 @@ class AgentTasks(ReferenceRecovery):
                         rig=self.loaders['rig'](entity);material=next((r for r in rig.meta.get('material_sources',[]) if r['id']==args.get('part')),None)
                         if material is None:raise UserError('找不到当前骨架保留的原像素参考')
                         content=rig.blob(material)
-                    elif kind=='character' and view in ('image','assembly'):pass
+                    elif kind=='character' and view in ('image','assembly','reconstruction-image','layer-overlap-image','prebind-parts','prebind-assembly','prebind-spread'):pass
                     elif content is not None:pass
                     elif view=='part':
                         from urllib.parse import urlencode
@@ -544,6 +553,12 @@ class AgentTasks(ReferenceRecovery):
                     im=Image.open(io.BytesIO(content if content is not None else self.api(route+'/'+view+query,binary=True)));pixel_size=im.size;im.thumbnail((1024,1024))
                     if kind=='character' and view=='image':
                         t.setdefault('image_checks',{})[entity]=self.loaders['character'](entity).meta['image_id'];self.save_tool_state(t)
+                    elif kind=='character' and view.startswith('prebind-'):
+                        t.setdefault('prebind_seen',{}).setdefault(entity,{})[view]=self.loaders['character'](entity).prebind_evidence()[0]['digest'];self.save_tool_state(t)
+                    elif kind=='character' and view=='layer-overlap-image':
+                        t.setdefault('overlap_seen',{})[entity]=self.loaders['character'](entity).layer_overlap()[0]['digest'];self.save_tool_state(t)
+                    elif kind=='character' and view=='reconstruction-image':
+                        t.setdefault('reconstruction_seen',{})[entity]=self.loaders['character'](entity).reconstruction()[0]['digest'];self.save_tool_state(t)
                     elif kind=='character' and view=='assembly':
                         t.setdefault('assembly_checks',{})[entity]=self.loaders['character'](entity).meta['revision'];self.save_tool_state(t)
                     elif kind=='character' and view=='candidate':
@@ -560,6 +575,13 @@ class AgentTasks(ReferenceRecovery):
                     except UserError:payload={**payload,'sheets':['turnaround',*payload['sheets']]}
                 t['stage_detail']=action;self.save_tool_state(t)
                 if action not in CHAR_ACTIONS:raise UserError('不允许此单图操作')
+                plan=payload if action=='prepare-assembly' else payload.get('assembly_plan',{})
+                if not isinstance(plan,dict):raise UserError('装配方案须为对象')
+                for replacement in plan.get('replacements',[]):self.own(t,'character',replacement.get('character_id'))
+                if action=='review-prebind' and any(t.get('prebind_seen',{}).get(entity,{}).get(v)!=payload.get('digest') for v in ('prebind-parts','prebind-assembly','prebind-spread')):raise UserError('先查看当前完整部件、试拼和摆开三张图')
+                if action=='review-overlap' and t.get('overlap_seen',{}).get(entity)!=payload.get('digest'):raise UserError('先查看当前layer-overlap-image')
+                if action=='review-reconstruction' and t.get('reconstruction_seen',{}).get(entity)!=payload.get('digest'):raise UserError('先查看当前reconstruction-image，再记录拼回验收')
+                if action=='build' and t.get('canvas_contract')=='canvas-layers-v1' and self.loaders['character'](entity).meta.get('canvas_contract')!='canvas-layers-v1':raise UserError('先安装同坐标图层并完成拼回验收；不能用格子布局代替母版位置')
                 if action in ('apply-source-layout','apply-part-layout') and t.get('preparation_contract')=='side-parts-v2':
                     c=self.loaders['character'](entity);review=t.get('part_checks',{}).get(entity+':'+str(payload.get('job_id') if action=='apply-part-layout' else 'source'),{})
                     if review.get('image_id')!=c.meta['image_id'] or review.get('revision')!=c.meta['revision'] or review.get('verdict') not in ('ready','needs_adjustment'):
@@ -585,6 +607,8 @@ class AgentTasks(ReferenceRecovery):
                     if assessment.get('image_id')!=c.meta.get('image_id') or assessment.get('revision')!=c.meta['revision']:raise UserError('角色图或部件已变化，请查看图片并重新记录适配检查')
                     if action in ('build','generate-parts') and t.get('preparation_contract')=='side-parts-v2':require_side_camera(assessment,t['requirements'])
                     if action=='build' and assessment.get('verdict')!='ready':raise UserError('图片尚不适合目标动作，请先补视角／部件或说明无法制作')
+                    if action=='build' and t.get('orientation_contract')==ORIENTATION_CONTRACT:
+                        checked_orientation(assessment)
                     if action=='build' and t.get('integrity_contract')==INTEGRITY_CONTRACT:
                         checked_material_review(assessment)
                     if action=='build' and t.get('image_preparation')=='asset-sheet':
@@ -620,7 +644,7 @@ class AgentTasks(ReferenceRecovery):
                 self.own(t,'rig',args['source_rig_id'])
                 for op in args.get('operations',[]):
                     if op.get('action')=='copy-animation':self.own(t,'rig',op['source_rig_id'])
-                    if op.get('action') in ('texture-repair','material-finish'):
+                    if op.get('action') in ('texture-repair','material-finish','occlusion-overlay'):
                         key='rig:'+args['source_rig_id'];current=resource_digest(self.loaders['rig'](args['source_rig_id']).export())
                         if t.get('closeup_checks',{}).get(key,{}).get('sha256')!=current:raise UserError('先查看当前资源的spine_closeup局部图，再按实际像素修复')
                 completed_before=self.rig_automation.path(args.get('nonce')).exists()
@@ -734,6 +758,10 @@ class AgentTasks(ReferenceRecovery):
         material=checked_material_review(args,anchor) if t.get('integrity_contract')==INTEGRITY_CONTRACT else None
         assessment={'verdict':args['verdict'],'reason':args['reason'][:1000],'recorded_at':time.time()}
         if material is not None:assessment['material_checks']=material
+        if t.get('connection_contract') in CONNECTION_CONTRACTS and anchor in CONNECTION_CHECKS:
+            assessment['connection_checks']=checked_connection(args,anchor,t['connection_contract'])
+        if t.get('orientation_contract')==ORIENTATION_CONTRACT and orientation_fields(anchor):
+            assessment['orientation_checks']=checked_orientation(args,anchor)
         if t.get('garment_contract')==GARMENT_CONTRACT and anchor in garment_anchors(skeleton):
             if item['report'].get('frames',0)<garment_frame_count(clip):raise UserError('先查看足够帧数的当前腿部放大图，行走须32帧')
             assessment['garment_checks']=checked_garment_review(args)
@@ -893,8 +921,13 @@ class AgentTasks(ReferenceRecovery):
                     from .seam_review import required_detail_anchors,require_detail_reviews
                     skeleton=(self.loaders[check_kind](check_id).state['skeleton'] if check_kind=='rig' else self.loaders[check_kind](check_id).skeleton_data)
                     require_detail_reviews(t.get('closeup_checks',{}).get(key,{}),digest,required,required_detail_anchors(skeleton))
+                    if t.get('orientation_contract')==ORIENTATION_CONTRACT:
+                        require_orientation_reviews(t.get('closeup_checks',{}).get(key,{}),digest,required,required_detail_anchors(skeleton))
                     if t.get('integrity_contract')==INTEGRITY_CONTRACT:
                         require_material_reviews(t.get('closeup_checks',{}).get(key,{}),digest,required,required_detail_anchors(skeleton))
+                if t.get('connection_contract') in CONNECTION_CONTRACTS:
+                    skeleton=(self.loaders[check_kind](check_id).state['skeleton'] if check_kind=='rig' else self.loaders[check_kind](check_id).skeleton_data)
+                    require_connections(t.get('closeup_checks',{}).get(key,{}),digest,required,skeleton,t['connection_contract'])
                 if t.get('garment_contract')==GARMENT_CONTRACT:
                     skeleton=(self.loaders[check_kind](check_id).state['skeleton'] if check_kind=='rig' else self.loaders[check_kind](check_id).skeleton_data)
                     require_garment_reviews(t.get('closeup_checks',{}).get(key,{}),digest,required,skeleton)
@@ -907,6 +940,11 @@ class AgentTasks(ReferenceRecovery):
                     if locomotion:
                         contact=t.get('contact_checks',{}).get(key,{})
                         if contact.get('resource_sha256')!=digest or contact.get('animation') not in locomotion or contact.get('status')!='assessed':raise UserError('完整部件图成果尚未完成当前资源的鞋底接地诊断，请查看 spine_contact 和32帧实际动作')
+                final_skeleton=(self.loaders[check_kind](check_id).state['skeleton'] if check_kind=='rig' else self.loaders[check_kind](check_id).skeleton_data)
+                if final_skeleton.get('skeleton',{}).get('gait',{}).get('posture_policy')=='natural-walk-v2' and 'walk' in required:
+                    posture=self.contact_check(checked_content,'walk')
+                    if posture.get('status')!='assessed' or posture.get('posture_checks_passed') is not True:
+                        raise UserError('自然行走的实际膝弯超过支撑35°／摆动50°，或尚无法测量；请修正骨架与抬脚高度后复检，可先交付草稿')
                 filename=f'{i+1:02d}-{kind}-{entity}.zip';z.writestr(filename,content)
                 preview=('/result.html?rig='+check_id if kind in ('rig','character') else '/?project='+entity)
                 if kind in ('rig','character') and 'walk' in report['animations']:preview+='&animation=walk'

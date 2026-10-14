@@ -89,25 +89,28 @@ def render_closeups(frames, directory, anchor, render, isolated=False):
         if '-upper-' in anchor:
             side,kind=anchor.split('-upper-');slots.update([side+'-lower-'+kind,side+('-foot' if kind=='leg' else '-hand')])
         if anchor=='__hair__':slots={'head','back'}
+        if anchor=='__hip__':slots={'torso','pelvis','l-upper-leg','r-upper-leg'}
+        if anchor=='__back__':slots={'back','torso'}
         filtered=[{**f,'geometry':[g for g in f['geometry'] if g['slot'] in slots]} for f in frames]
         if any(not f['geometry'] for f in filtered):raise UserError('此 anchor 没有可隔离的同名附件，请使用组合图诊断')
         frames=filtered
     rows=(len(frames)+3)//4
-    contrast=anchor in ('torso','l-upper-arm','r-upper-arm','l-upper-leg','r-upper-leg')
+    contrast=anchor in ('__hip__','__back__','torso','l-upper-arm','r-upper-arm','l-upper-leg','r-upper-leg')
     sheet=Image.new('RGB',(1600,400*(rows+int(contrast))),'#e5ebf3');draw=ImageDraw.Draw(sheet)
     evidence=[]
     for i,frame in enumerate(frames):
-        bone=next((b for b in frame['bones'] if b['name']==('head' if anchor=='__hair__' else anchor)),None)
+        bone_name={'__hair__':'head','__hip__':'hip','__back__':'torso'}.get(anchor,anchor)
+        bone=next((b for b in frame['bones'] if b['name']==bone_name),None)
         if bone is None:raise UserError('找不到局部参考骨骼，请按真实骨架提供 anchor')
         length=math.hypot(bone['ex']-bone['x'],bone['ey']-bone['y'])
         x,y=bone['x'],bone['y'];view=[x-length*.65,y-length*.38,x+length*.65,y+length*.92]
         extent_source='bone-length'
-        if length<1:
+        if length<1 and anchor!='__hip__':
             geometry=[g for g in frame['geometry'] if g['slot']==('head' if anchor=='__hair__' else anchor) or g.get('path')==anchor]
             if not geometry:raise UserError('零长度参考骨没有对应附件，请选择实际头颈骨骼')
             xy=np.array([v for g in geometry for v in g['xy']]).reshape(-1,2);lo=xy.min(0);hi=xy.max(0)
             length=float(max(hi[1]-lo[1],hi[0]-lo[0])*.55)
-            if length<1:raise UserError('头颈附件无可渲染范围')
+            if length<1 and anchor!='__hip__':raise UserError('头颈附件无可渲染范围')
             x=float((lo[0]+hi[0])/2);y=float(lo[1]+(hi[1]-lo[1])*.12)
             view=[x-length*.65,y-length*.38,x+length*.65,y+length*.92];extent_source='actual-attachment-bounds'
         local_view=detail_view(frame,anchor)
@@ -143,6 +146,21 @@ def require_detail_reviews(review,digest,clips,anchors):
 
 def detail_view(frame,anchor):
     """Use actual animated geometry, including chain endpoints, not fixed screen boxes."""
+    if anchor=='__hip__':
+        bones={b['name']:b for b in frame['bones']};hip=bones.get('hip')
+        if not hip:raise UserError('找不到髋部参考骨骼')
+        thighs=[b for n,b in bones.items() if n in ('l-upper-leg','r-upper-leg')]
+        radius=max([math.hypot(b['ex']-b['x'],b['ey']-b['y'])*.6 for b in thighs]+[12.])
+        return [hip['x']-radius,hip['y']-radius*.75,hip['x']+radius,hip['y']+radius*.4]
+    if anchor=='__back__':
+        geometry=[g for g in frame['geometry'] if g['slot']=='back']
+        # A declared integrated backpack uses the complete costume geometry.
+        # Connection anchors schedule this only for characters carrying that art.
+        if not geometry:geometry=[g for g in frame['geometry'] if g['slot']=='torso']
+        if not geometry:raise UserError('找不到背部配件或其完整衣装图层')
+        xy=np.array([v for g in geometry for v in g['xy']]).reshape(-1,2)
+        lo=xy.min(0);hi=xy.max(0);margin=max(float(max(hi-lo))*.25,5)
+        return [float(lo[0]-margin),float(lo[1]-margin),float(hi[0]+margin),float(hi[1]+margin)]
     if anchor=='__hair__':
         geometry=[g for g in frame['geometry'] if g['slot'] in ('head','back') or 'hair' in g.get('path','')]
         if not geometry:raise UserError('找不到头发相关图面')

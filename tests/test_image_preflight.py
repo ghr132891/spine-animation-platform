@@ -167,7 +167,7 @@ class ReferenceFailurePhaseTests(unittest.TestCase):
         from app.provider import ProviderError,classify_provider_failure
         with tempfile.TemporaryDirectory() as directory:
             matrix=Matrix(Path(directory))
-            with patch.object(matrix.hosting,'status',return_value={'ready':True}),patch.object(matrix.hosting,'publish',return_value={'url':'https://example.com/fixture.png','expires_at':9999999999,'provider':'s3'}),patch.object(matrix,'download_result',side_effect=ProviderError(classify_provider_failure(category='download_failed'))),patch.object(matrix,'request') as paid:
+            with patch.object(matrix.hosting,'status',return_value={'ready':True,'provider':'s3'}),patch.object(matrix.hosting,'publish',return_value={'url':'https://example.com/fixture.png','expires_at':9999999999,'provider':'s3'}),patch.object(matrix,'download_result',side_effect=ProviderError(classify_provider_failure(category='download_failed'))),patch.object(matrix,'request') as paid:
                 with self.assertRaises(ProviderError) as caught:matrix.ensure_reference(fixture_image())
                 self.assertEqual(caught.exception.details['category'],'reference_unavailable')
                 self.assertEqual(caught.exception.details['operation'],'reference')

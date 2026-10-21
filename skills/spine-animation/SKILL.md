@@ -2,7 +2,7 @@
 name: spine-animation
 description: "通过 Spine 工作台在 Codex 对话中从角色图片或描述制作 Spine 动画，查看动作帧图，并根据后续自然语言要求连续微调骨骼、贴图位置和动画，另存版本与下载 ZIP。支持局域网调用和批量任务；用于将人物参考图准备为侧向行走部件图、检查修整连接、组装后制作并复检动画，以及已有 Spine 的骨骼、动作调整。"
 metadata:
-  version: "1.11.0"
+  version: "1.11.1"
 ---
 
 # Spine 动画：平台制作，Codex 验收与定向微调
@@ -44,7 +44,7 @@ metadata:
 
 ## 正式绑定前的实际骨骼压力测试
 
-静态试拼通过不代表动作接合合格。新动画任务在正式绑定前自动准备实际 Spine 骨骼驱动的短程压力图：摆臂极值、双腿交替、髋部画面内旋转，每组8帧，全身／腰胯／肩带共9张。诊断使用正式网格权重与遮挡，不创建正式版本。用 `stress-test` 取清单，`spine_image view=stress-image, part=p0..p8` 逐张看图，`review-stress` 记录真实结论。缺验收或有尖角／碎片会停留待修复；通过后才自动绑定，正式待机行走仍需动态复检。详见 [压力测试执行](references/assembly-execution.md#实际骨骼压力测试)。
+静态试拼通过不代表动作接合合格。新动画任务在正式绑定前自动准备实际 Spine 骨骼驱动的短程压力图：摆臂极值、双腿交替、髋部画面内旋转，每组8帧，全身／腰胯／肩带共9张。诊断使用正式网格权重与遮挡，不创建正式版本。用 `stress-test` 取清单，`spine_image view=stress-image, part=p0..p8` 逐张看图，`review-stress` 记录真实结论。缺验收或有尖角／碎片会停留待修复；通过后才自动绑定，正式待机行走仍需动态复检。详见 [压力测试执行](references/assembly-execution.md#实际骨骼压力测试)。肩带跨袖或出现残片时，先核实完整图面是否已在torso，按 [固定配件归属](references/assembly-execution.md#固定穿戴配件的遮挡归属) 消除重复前景，不截短肩带掩盖问题。
 
 ## 默认执行补全与装配
 

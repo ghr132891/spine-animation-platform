@@ -7,7 +7,7 @@ import numpy as np
 from .core import UserError,sha
 
 CATALOG={
- 'trousers':{'label':'上衣＋长裤','continuous_hips':True,'insert_ratio':.18,'ownership':{'collar':'torso','waistband':'torso','pockets':'torso','hip_cloth':'shared-costume-master','sleeves':'arms','shoes':'legs'},'note':'裤腰、裆部和左右大腿根共用同一完整裤装母版；裤缝、褶皱、纹理尺度连续，独立腿片保留隐藏裤料。'},
+ 'trousers':{'label':'上衣＋长裤','continuous_hips':True,'insert_ratio':.18,'ownership':{'collar':'torso','waistband':'torso','pockets':'torso','hip_cloth':'shared-costume-master','sleeves':'arms','fixed_shoulder_straps':'torso-behind-near-arm','shoes':'legs'},'note':'裤腰、裆部和左右大腿根共用同一完整裤装母版；裤缝、褶皱、纹理尺度连续，独立腿片保留隐藏裤料。'},
  'shorts':{'label':'上衣＋短裤','continuous_hips':True,'insert_ratio':.15,'ownership':{'collar':'torso','waistband':'torso','pockets':'torso','hip_cloth':'shared-costume-master','bare_legs':'legs','shoes':'legs'},'note':'腰胯与短裤裤管使用同源连续图面，裤口和裸腿分材质处理；腿部皮肤不能用裤料补齐。'},
  'skirt':{'label':'连衣裙／裙装','continuous_hips':False,'insert_ratio':.16,'ownership':{'collar':'torso','waist_and_skirt':'torso','lining':'torso','bare_legs':'legs','shoes':'legs'},'note':'腰线至裙摆保留完整连续裙料，腿片独立位于裙下，保持原实色内衬与透明外纱。裙料不能复制到裸腿。'},
  'split-robe':{'label':'开衩长袍／长衣','continuous_hips':False,'insert_ratio':.18,'ownership':{'collar':'torso','waist':'torso','front_back_panels':'torso','inner_trousers':'legs','shoes':'legs'},'note':'衣领到衣摆连续，前后衣片和内穿裤装分开归属；保留原开衩与后侧遮挡，不用外袍纹理覆盖内裤。'},
@@ -115,7 +115,7 @@ def generation_request(c,data):
   if not regions:raise UserError('没有已确认缺失区域，不重复提交补图')
   out['sheets']=sorted({'costume' if r['part']=='torso' or t['profile']['continuous_hips'] and r['part'].endswith('leg') else 'limbs' for r in regions})
  shared='服装模板：'+t['profile']['label']+'。'+t['profile']['note']+' 所有裁片沿用同一母版相机与像素尺度，袖根、髋根覆盖量按同一套实测尺寸。'
- if c.meta.get('back_accessory_part')=='torso':shared+=' 已有背包包体保留在主衣装，肩带前景单独控制遮挡；空格不代表删除背包。'
+ if c.meta.get('back_accessory_part')=='torso':shared+=' 已有背包包体与固定肩带保留在主衣装，近臂位于前方；只在实图确需跨肩覆盖时另取局部前景，不能把整条垂带复制到袖子前。空格不代表删除背包。'
  elif c.meta.get('back_accessory_part')=='back':shared+=' 背包独立保留在背部图层，前肩带属于对应前景层。'
  shared+=' 装配母版%s×%s像素；裁片排版位置可变，装配尺度固定。'%tuple(t['basis']['size'])
  shared+=' 母版投影肩关节间距%.1f、髋关节间距%.1f像素。'%(t['dimensions']['shoulder_span'],t['dimensions']['hip_span'])

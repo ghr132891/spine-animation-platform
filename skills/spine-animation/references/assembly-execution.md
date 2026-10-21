@@ -128,3 +128,11 @@ review_ready 只表示复检包已准备，仍为 not_reviewed。使用 spine_re
 先用原尺寸逐姿态与关节裁切区分“被擦除缺图”和“前景层夹带衣料”。恢复必须来自本角色同一部件的 part_finish_history；不能拿另一侧镜像替代。肩带应分清固定在主体上的包带与跨肩覆盖层，不要用截短前景制造新硬边。
 
 `repair-connections data={revision,restore_parts:[{part,expected_sha256,source_sha256,box,reason}],edits,assembly_plan}`：box为当前部件PNG内像素矩形，历史来源必须同尺寸且出现在本部件历史。恢复、finish-parts式edits、prepare-assembly式assembly_plan一次事务提交，只有最外层重建证据。恢复目标随后connections使用平台计算的确切新摘要，无需模型再往返读取一次。其余部件与来源仍校验显式摘要；失败不替换原角色。旧压力验收失效，复检前不准宣布合格。
+
+## 固定穿戴配件的遮挡归属
+
+肩带悬浮或跨袖时，先对照主衣装原PNG：若完整肩带已经在主衣装，额外复制的整条前景可能才是问题。实际检查后使用 `prepare-assembly data={revision,accessory_occlusion:[{mode:"fixed-to-costume",source:"torso",near_part:"l-upper-arm"或"r-upper-arm",source_sha256,remove_foregrounds:[真实重复前景名],reason}]}`。
+
+平台只移除当前衣装派生、且subject对应所选近臂的重复前景，要求完整衣装、正确源摘要和真实前后顺序；保留所有base贴图、关节点与动作。该操作不得同时指定新增overlays，避免重新加入被删除的层。不能用于没有同源完整图面的独立配件，不能套给所有人物。
+
+不要通过截短肩带形成新的硬截边，也不要只用角度切换drawOrder掩盖归属错误。Spine共享网格和drawOrder是可用机制，但需要匹配真实深度关系。修复后重新做完整部件、摆开、压力与idle/walk复检。具体GitHub一手来源及试验见平台仓库 docs/GITHUB_OCCLUSION_RESEARCH.md。

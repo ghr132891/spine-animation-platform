@@ -1,4 +1,4 @@
-Spine 动画助手 · Skill + MCP 安装包（1.11.0）
+Spine 动画助手 · Skill + MCP 安装包（1.11.1）
 
 用途
 在 Codex 中给角色图片或描述，制作 Spine 待机／行走动画。

@@ -586,6 +586,10 @@ class CharacterProject:
         if data.get('connections'):
             from .connection_fit import apply
             apply(self,data['connections'])
+        if 'accessory_occlusion' in data:
+            if 'overlays' in data:raise UserError('配件归属与新增前景请分开提交，避免把已移除层重新加入')
+            from .accessory_occlusion import apply as apply_accessory
+            apply_accessory(self,data['accessory_occlusion'])
         meta=copy.deepcopy(self.meta)
         parts=self.layered_parts(self.image(),meta['landmarks'],meta.get('masks',{}),adjust=False,overlays=False)
         meta['assembly_overlays']=validate_overlays(parts,data.get('overlays',meta.get('assembly_overlays',[])))

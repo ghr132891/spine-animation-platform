@@ -1,0 +1,28 @@
+# GitHub 遮挡修复实测（2026-10-21）
+
+目标：解决橙衣人物在近臂内摆时，固定肩带横跨袖子、残片悬浮的问题。保留现有完整腿缘修复与已交付旧版。
+
+## 查证的项目
+
+| 一手来源 | 确认的机制 | 本平台使用方式 |
+|---|---|---|
+| [Spine runtimes 4.2 MeshAttachment](https://github.com/EsotericSoftware/spine-runtimes/blob/4.2/spine-ts/spine-core/src/attachments/MeshAttachment.ts) | 同一网格的骨骼、顶点与三角形可由不同附件共享 | 试验保留原臂网格权重，仅增加前景片，未复制项目源码 |
+| [Spine runtimes 4.2 DrawOrderTimeline](https://github.com/EsotericSoftware/spine-runtimes/blob/4.2/spine-ts/spine-core/src/Animation.ts) | 插槽绘制顺序可以在动作时间线上变化；切换是离散的 | 做了姿态顺序试验，因本例不需要离散切换，未加入默认路径 |
+| [Spine scripts / Photoshop](https://github.com/EsotericSoftware/spine-scripts/tree/master/photoshop) | 提供从分层素材到Spine的数据导出流程 | 将完整图面、正确层级与动画绑定分开处理，不把图集格子当空间关系 |
+| [See-through](https://github.com/shitagaki-lab/see-through) | 对角色做补全分层和绘制顺序推断，输出PSD；项目说明绑定不在其覆盖范围内 | 作为真正缺图时的补全候选；本例已有完整肩带，无需重新运行模型或生成图片 |
+
+## 试验与选用方法
+
+1. **固定裁切的前臂前景**：图面与网格一致，但固定分界仍会在肩带上产生台阶，不作为最终修复。
+2. **按手臂角度切换绘制顺序**：极值时遮挡改善，但单层顺序切换可能产生视觉跳变，且本例没有必须换层的深度关系，不采用为默认方案。
+3. **固定配件归主体，近臂自然遮挡**：完整肩带原本就在torso。移除额外覆盖整条近臂的重复前景，不删除任何原图像素、截短肩带或更改动作幅度。此方案用于实际修复与复检。
+
+方案3是对本角色原图与压力图的判断，不是自动认定所有背包肩带都应该藏在手臂后。跨肩披带、护肩、手持道具或需要独立运动的配件仍应按实际图面拆层和绑定。需要另层时保留真实源图与正确权重，不用统一左右规则猜测遮挡。
+
+## 平台执行
+
+`prepare-assembly` 新增 `accessory_occlusion`，支持 `mode=fixed-to-costume`：指定完整衣装source、近侧完整手臂near_part、当前衣装source_sha256、要移除的remove_foregrounds以及实图reason。只删除来源与被遮挡对象匹配的重复派生前景。完整主体贴图、骨骼、关节点和动作保持不变；旧验收失效，重新检查试拼、摆开和实际压力动作。
+
+模板提示词也明确：已有固定肩带保留在主衣装，近侧手臂在前；只有真实需要跨肩覆盖时才另取局部前景，不能将整条垂带复制到袖子前。
+
+本次参考公开实现机制独立编写校验与装配代码，没有移植See-through模型，也没有把生成或分层推断宣称为自动美术验收。具体结果与原尺寸证据由平台过程页保存。

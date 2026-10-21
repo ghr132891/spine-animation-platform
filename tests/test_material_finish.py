@@ -7,6 +7,37 @@ from tools.render_rig_evidence import sample_linear
 
 WHOLE=[[0,0],[1,0],[1,1],[0,1]]
 class MaterialFinishTests(unittest.TestCase):
+    def test_explicit_opaque_spot_reuses_neighbour_color_without_punching_hole(self):
+        im=Image.new('RGBA',(12,12),(80,60,49,255));im.putpixel((6,6),(239,239,231,255));before=np.array(im)
+        op={'kind':'copy-pixel-color','polygon':WHOLE,'reference_note':'confirmed isolated opaque white contamination in brown hair',
+            'points':[{'target':[6,6],'source':[7,6],'expected_rgba':[239,239,231,255]}]}
+        out,r=finish_material(im,{'reason':'one reviewed pixel','operations':[op]});after=np.array(out)
+        self.assertEqual(r['rgb_changed_pixels'],1);np.testing.assert_array_equal(before[:,:,3],after[:,:,3]);self.assertEqual(out.getpixel((6,6)),(80,60,49,255))
+        for point in ({'target':[6,6],'source':[7,6],'expected_rgba':[0,0,0,0]}, {'target':[6,6],'source':[0,0],'expected_rgba':[239,239,231,255]}):
+            with self.assertRaises(UserError):finish_material(im,{'reason':'guard','operations':[{**op,'points':[point]}]})
+        self.assertEqual(im.getpixel((6,6)),(239,239,231,255))
+
+    def test_edge_decontamination_preserves_alpha_white_cloth_and_interior(self):
+        im=Image.new('RGBA',(24,24));d=ImageDraw.Draw(im)
+        d.rectangle((5,5,18,18),fill=(80,45,25,255));d.line((4,6,4,17),fill=(205,190,180,120))
+        d.rectangle((10,8,15,14),fill=(255,255,255,255))
+        before=np.array(im)
+        out,r=finish_material(im,{'reason':'Confirmed white matte fringe','operations':[{'kind':'edge-decontaminate','polygon':WHOLE,'radius':3,'reference_note':'Only contaminated partial-alpha edge; interior white cloth protected'}]})
+        after=np.array(out)
+        np.testing.assert_array_equal(after[:,:,3],before[:,:,3])
+        np.testing.assert_array_equal(after[before[:,:,3]==255],before[before[:,:,3]==255])
+        self.assertLess(after[10,4,0],before[10,4,0]);self.assertGreater(r['rgb_changed_pixels'],0)
+        self.assertFalse(r['rgb_preserved'])
+
+    def test_edge_decontamination_requires_scope_and_does_not_dark_paint_white_art(self):
+        im=Image.new('RGBA',(24,24));d=ImageDraw.Draw(im)
+        d.rectangle((5,5,18,18),fill=(245,245,245,255));d.line((4,6,4,17),fill=(250,250,250,120))
+        op={'kind':'edge-decontaminate','polygon':WHOLE,'reference_note':'reviewed white fabric'}
+        out,r=finish_material(im,{'reason':'check','operations':[op]})
+        np.testing.assert_array_equal(np.array(out),np.array(im));self.assertEqual(r['changed_pixels'],0)
+        for change in ({'reference_note':''},{'radius':5},{'radius':1.5},{'min_lift':float('nan')}):
+            with self.assertRaises(UserError):finish_material(im,{'reason':'check','operations':[{**op,**change}]})
+
     def test_sheer_gradient_preserves_rgb_and_unselected_costume(self):
         im=Image.new('RGBA',(80,100),(20,120,220,255));before=np.array(im)
         out,report=finish_material(im,{'reason':'原图下裙为轻纱','operations':[{'kind':'opacity','polygon':[[0,.5],[1,.5],[1,1],[0,1]],'top':.5,'bottom':1,'start':1,'end':.5,'reference_note':'依据原立绘材质，非alpha精确恢复'}]})

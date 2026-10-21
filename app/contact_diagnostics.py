@@ -15,7 +15,12 @@ from pathlib import Path
 
 from PIL import Image
 
-from app.core import MAX_PIXELS, parse_atlas, safe_name
+from app.core import MAX_PIXELS, parse_atlas, safe_name, UserError
+
+
+def require_natural_walk_contact(report):
+    if report.get('status')!='assessed' or report.get('posture_checks_passed') is not True or report.get('numerical_checks_passed') is not True:
+        raise UserError('自然行走的接地、滑步、循环或膝弯检查尚未全部通过；请修正后复检，可先交付待修草稿')
 
 
 ROOT = Path(__file__).resolve().parents[1]

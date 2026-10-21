@@ -33,7 +33,8 @@ class ReferenceRecovery:
                         'message': '参考图读取失败，平台自动检测恢复；此请求尚未提交生图。'}
             self.update(id, state='waiting_reference', stage='等待参考图恢复', reference_recovery=recovery)
             # Release Codex instead of spending a model run on network polling.
-            if self.active == id and self.process: self.process.terminate()
+            process=self.processes.get(id)
+            if process:process.terminate()
             self.wake.set()
             return True
 

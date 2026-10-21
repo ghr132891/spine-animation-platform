@@ -1,4 +1,4 @@
-Spine 动画助手 1.10.2 · 管理员交付说明
+Spine 动画助手 1.11.0 · 管理员交付说明
 
 交付给同事两项即可：
 1. spine-animation-skill.zip 安装包。

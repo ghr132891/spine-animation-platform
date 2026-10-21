@@ -1,8 +1,46 @@
 """Content-bound pre-animation acceptance for newly generated full asset sheets."""
-import hashlib,json
+import copy,hashlib,json,uuid
+from pathlib import Path
 from PIL import Image,ImageDraw
-from .core import UserError,png_bytes
+from .core import UserError,png_bytes,atomic_json,read_image
 CHECKS=('complete_parts','assembly_matches','spread_intact')
+
+def cached_evidence(character):
+    """Persist all three panels from one frozen assembly, never an acceptance.
+
+    Review-only revisions reuse evidence; pixels, placement, order or rendering
+    code invalidate it. The manifest is published after all immutable PNGs.
+    """
+    with character.lock:
+        frozen=copy.copy(character);frozen.meta=copy.deepcopy(character.meta);frozen.cache={}
+        fields=('image_id','landmarks','settings','masks','part_layers','part_review',
+                'assembly_overlays','canvas_contract','canvas_owners','back_accessory_part')
+        payload={k:frozen.meta.get(k) for k in fields}
+        # Include transitive rendering helpers so upgrades cannot serve old art.
+        code=hashlib.sha256(b''.join(p.read_bytes() for p in sorted(Path(__file__).parent.glob('*.py')))).hexdigest()
+        key=hashlib.sha256(json.dumps([code,payload],sort_keys=True,allow_nan=False).encode()).hexdigest()
+        folder=character.directory/'prebind-cache'/key;manifest=folder/'manifest.json'
+        try:
+            saved=json.loads(manifest.read_text());images={}
+            if saved['key']!=key:raise ValueError('stale evidence')
+            for name in ('parts','assembly','spread'):
+                raw=(folder/(name+'.png')).read_bytes()
+                if hashlib.sha256(raw).hexdigest()!=saved['images'][name]:raise ValueError('damaged evidence')
+                images[name]=read_image(raw).convert('RGBA' if name=='assembly' else 'RGB')
+            return saved['report'],images
+        except (OSError,ValueError,KeyError,TypeError):
+            pass
+        report,images=inspect(frozen)
+        folder.mkdir(parents=True,exist_ok=True);digests={}
+        for name,image in images.items():
+            raw=png_bytes(image);digests[name]=hashlib.sha256(raw).hexdigest()
+            temp=folder/(name+'.'+uuid.uuid4().hex+'.tmp')
+            try:
+                temp.write_bytes(raw);temp.replace(folder/(name+'.png'))
+            finally:temp.unlink(missing_ok=True)
+        atomic_json(manifest,{'key':key,'report':report,'images':digests})
+        return report,images
+
 def inspect(character):
     parts=character.parts();order=character.review_order([p['name'] for p in parts])
     overlap,spread=character.layer_overlap()

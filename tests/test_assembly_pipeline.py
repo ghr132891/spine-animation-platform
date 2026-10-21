@@ -2,7 +2,7 @@ import copy,tempfile,unittest
 from pathlib import Path
 from app.character import CharacterProject,make_skeleton
 from app.core import png_bytes,sha,UserError
-from app.assembly_pipeline import overlay_parts
+from app.assembly_pipeline import overlay_parts,overlay_order
 from tests.test_asset_sheet_workflow import asset_fixture,assembly_guide
 
 class AssemblyExecutionTests(unittest.TestCase):
@@ -86,3 +86,27 @@ class AssemblyExecutionTests(unittest.TestCase):
   c.apply_source_layout({'revision':c.meta['revision'],'parts':[torso]})
   self.assertEqual(c.meta['assembly_overlays'],[])
   self.assertEqual(c.meta['assembly_invalidations'][-1]['source'],'torso')
+
+ def test_guide_save_preserves_custom_complete_layer_order(self):
+  c=self.c;self.collar();order=c.review_order([p['name'] for p in c.parts()])
+  order[0],order[1]=order[1],order[0]
+  c.update_review({'revision':c.meta['revision'],'part_review':{'draw_order':order,'adjustments':{}}})
+  before={p['name']:png_bytes(p['image']) for p in c.parts()}
+  c.update({'revision':c.meta['revision'],'landmarks':copy.deepcopy(c.meta['landmarks']),'settings':c.meta['settings']})
+  self.assertEqual(c.review_order(list(before)),order)
+  self.assertEqual(before,{p['name']:png_bytes(p['image']) for p in c.parts()})
+
+ def test_multiple_foregrounds_preserve_all_dependencies(self):
+  recipes=[{'source':'torso','subject':'head','name':'front'},
+           {'source':'head','subject':'back','name':'strap'}]
+  order=overlay_order(['back','head','torso'],recipes)
+  for r in recipes:
+   self.assertLess(order.index(r['source']),order.index(r['subject']))
+   self.assertLess(order.index(r['subject']),order.index(r['name']))
+
+ def test_conflicting_foregrounds_do_not_publish_partial_repair(self):
+  c=self.c;first=self.collar();p=next(p for p in c.base_parts() if p['name']=='head')
+  second=dict(first,name='rear',source='head',subject='torso',source_sha256=sha(png_bytes(p['image'])),polygon=[[0,0],[1,0],[1,1],[0,1]])
+  before=copy.deepcopy(c.meta)
+  with self.assertRaisesRegex(UserError,'冲突'):c.prepare_assembly({'revision':c.meta['revision'],'overlays':[first,second]})
+  self.assertEqual(c.meta,before)

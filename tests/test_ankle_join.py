@@ -60,7 +60,7 @@ class AnkleJoinTests(unittest.TestCase):
 
     def test_generation_prompts_keep_continuous_trouser_shoe_join_in_both_languages(self):
         character=generation_plan({'prompt':'可爱的快递机器人'})['items'][0]['prompt']
-        parts=generation_plan({'mode':'complete-parts'})
+        parts=generation_plan({'mode':'complete-parts','sheets':['legs']})
         legs=next(p['prompt'] for p in parts['items'] if p['sheet']=='legs')
         self.assertIn('裤装插接部分进入原鞋口',character);self.assertIn('鞋口前沿可读',character)
         self.assertIn('trouser insert seated inside its shoe',legs);self.assertIn('front cuff rim',legs)

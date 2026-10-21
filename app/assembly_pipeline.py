@@ -20,12 +20,28 @@ def atomic_assembly(method):
     """
     @wraps(method)
     def run(character,*args,**kwargs):
+        if getattr(character,'_assembly_transaction',False):return method(character,*args,**kwargs)
         with character.lock:
-            staged=copy.copy(character);staged.meta=copy.deepcopy(character.meta);staged.cache={}
+            staged=copy.copy(character);staged.meta=copy.deepcopy(character.meta);staged.cache={};staged._assembly_transaction=True
             def save(meta):
                 staged.meta=copy.deepcopy(meta);staged.meta['revision']+=1
             staged.save=save
             method(staged,*args,**kwargs)
+            if staged.asset_status()['ready']:
+                canonicalize(staged)
+                data=args[0] if args else kwargs.get('data',{})
+                if method.__name__=='_apply_reviewed_layout' or data.get('apply_template') or 'garment_template' in data:
+                    from .garment_templates import execute
+                    execute(staged)
+                parts=staged.parts()
+                staged.review_order([p['name'] for p in parts])
+                report,_=staged.prebind_evidence()
+                edges,_=staged.edge_evidence()
+                staged.meta['generation_preparation']={'executor':'platform','status':'awaiting_visual_review',
+                    'digest':report['digest'],'checks':report['checks'],
+                    'edge_digest':edges['digest'],'edge_candidates':edges['candidate_count'],
+                    'missing_overlap':report['missing_overlap'],'incomplete_parts':report['incomplete_parts'],
+                    'steps':['reuse-complete-pixels','register-common-canvas','resolve-occlusion','render-prebind']}
             character.save(staged.meta);character.cache={}
             return character.summary()
     return run
@@ -175,13 +191,22 @@ def overlay_parts(parts,items):
 
 
 def overlay_order(order,items):
+    # Solve all foreground constraints together. Sequential list moves can
+    # silently undo a preceding collar/strap relationship.
     order=[n for n in order if n not in {x['name'] for x in items}]
     for item in items:
-        source,subject,name=item['source'],item['subject'],item['name']
-        if order.index(source)>order.index(subject):
-            order.remove(source);order.insert(order.index(subject),source)
-        order.insert(order.index(subject)+1,name)
-    return order
+        order.insert(order.index(item['subject'])+1,item['name'])
+    edges={n:set() for n in order}
+    for item in items:
+        edges[item['subject']].add(item['source'])
+        edges[item['name']].add(item['subject'])
+    result=[]
+    while edges:
+        ready=next((n for n in order if n in edges and not edges[n]),None)
+        if ready is None:raise UserError('前后遮挡关系互相冲突，请检查领口、肩带和主体的层级')
+        result.append(ready);edges.pop(ready)
+        for dependencies in edges.values():dependencies.discard(ready)
+    return result
 
 
 def adjust_parts(parts,adjustments,landmarks,size):

@@ -2,7 +2,7 @@
 import ast,hashlib,json,re,shutil,sys,zipfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
-VERSION='1.10.2'
+VERSION=(ROOT/'VERSION').read_text().strip()
 
 def installer_files():
     tree=ast.parse((ROOT/'skills/spine-animation/scripts/install.py').read_text())
@@ -17,11 +17,18 @@ def package(path,entries):
     tmp.replace(path)
 
 def main():
+    # Generate every client identity from the single release version.
+    for relative in ('agent/spine_mcp.py','skills/spine-animation/scripts/spine_mcp.py'):
+        p=ROOT/relative;s=p.read_text();s=re.sub(r"('name':'spine-agent','version':')\d+\.\d+\.\d+(')",lambda m:m[1]+VERSION+m[2],s);p.write_text(s)
+    for relative in ('agent/openapi.json','skills/spine-ai-reskin/references/openapi.json'):
+        p=ROOT/relative;v=json.loads(p.read_text());v['info']['version']=VERSION;p.write_text(json.dumps(v,ensure_ascii=False,indent=2)+'\n')
+    for relative in ('skills/spine-animation/SKILL.md','skills/spine-ai-reskin/SKILL.md'):
+        p=ROOT/relative;s=p.read_text();s=re.sub(r'(\nmetadata:\n  version: ").*?("\n)',lambda m:m[1]+VERSION+m[2],s) if '\nmetadata:' in s else s.replace('\n---\n','\nmetadata:\n  version: "'+VERSION+'"\n---\n',1);p.write_text(s)
     skill=ROOT/'skills/spine-animation';dist=ROOT/'agent/spine-animation-distribution'
     for name in installer_files():
         target=dist/'spine-animation'/name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(skill/name,target)
     meta=json.loads((dist/'package.json').read_text());meta['version']=VERSION
-    meta['minimum_server_version']=VERSION;meta['tools']=['spine_reference','spine_sources','spine_submit','spine_batch','spine_status','spine_resume','spine_cancel','spine_refine','spine_result','spine_preview','spine_gait','spine_contact','spine_closeup','spine_review_bundle','spine_download']
+    meta['minimum_server_version']=VERSION;meta['tools']=['spine_reference','spine_sources','spine_submit','spine_batch','spine_status','spine_resume','spine_retry_stage','spine_cancel','spine_refine','spine_result','spine_preview','spine_gait','spine_contact','spine_closeup','spine_review_bundle','spine_download']
     for name in ('安装说明.txt','给Codex的安装指令.txt','管理员交付说明.txt'):
         guide=dist/name;content=guide.read_text()
         content=re.sub(r'(Spine 动画助手 )\d+\.\d+\.\d+',lambda m:m[1]+VERSION,content)

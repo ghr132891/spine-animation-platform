@@ -32,7 +32,7 @@ from .asset_integrity import GARMENT_CONTRACT, garment_anchors, garment_frame_co
 
 TERMINAL={'completed','failed','cancelled','interrupted'}
 KINDS={'project':'projects','rig':'rigs','character':'characters'}
-CHAR_ACTIONS={'prepare-assembly','finish-parts','prebind','review-prebind','layer-overlap','review-overlap','generate','generate-view','generate-parts','generation-plan','apply-ai','apply-part-sheet',
+CHAR_ACTIONS={'repair-connections','stress-test','review-stress','garment-template','edge-review','prepare-assembly','finish-parts','prebind','review-prebind','layer-overlap','review-overlap','generate','generate-view','generate-parts','generation-plan','apply-ai','apply-part-sheet',
               'apply-part-layout','apply-source-layout','install-canvas-layers','partition-canvas','review-reconstruction','reconstruction','guide','review','build','restore','foot-layers','reset-part','refresh-jobs'}
 
 
@@ -117,6 +117,8 @@ class AgentTasks(ReferenceRecovery):
         self.storage=Path(storage);self.root=Path(root);self.tasks=self.storage/'agent-tasks'
         self.loaders=loaders;self.rig_automation=rig_automation
         self.lock=threading.RLock();self.tool_lock=threading.RLock();self.wake=threading.Event();self.stop=threading.Event()
+        from .task_locks import TaskLocks
+        self.task_locks=TaskLocks();self.processes={};self.active_tasks=set()
         self.process=None;self.active=None;self.base='http://127.0.0.1:8780'
         self.token_path=self.storage/'agent-access-token'
         self.storage.mkdir(parents=True,exist_ok=True)
@@ -183,6 +185,10 @@ class AgentTasks(ReferenceRecovery):
             current=self.read(t['id'])
             if current['state'] in TERMINAL:
                 t['state']=current['state'];t['stage']=current['stage']
+            # The platform review coordinator can finish while a model tool is
+            # running. A stale model snapshot must not rewind its durable queue.
+            for key in ('animation_transitions','automatic_animation','automatic_build_attempts','material_animation','stage_checkpoints'):
+                if key in current:t[key]=copy.deepcopy(current[key])
             atomic_json(self.path(t['id']),t)
 
     def create(self,data):
@@ -193,6 +199,11 @@ class AgentTasks(ReferenceRecovery):
         sources=data.get('sources',[])
         encoded_image=data.get('image')
         preparation=data.get('image_preparation','asset-sheet')
+        output_scope=data.get('output_scope','animation')
+        if output_scope not in ('animation','materials'):raise UserError('output_scope 须为 animation 或 materials')
+        material_edits=data.get('material_edits')
+        if material_edits is not None and (output_scope!='materials' or not isinstance(sources,list) or len(sources)!=1 or not isinstance(sources[0],dict) or sources[0].get('kind')!='character'):
+            raise UserError('预置素材修整仅支持单个 character 的 materials 任务')
         if preparation not in POLICIES:raise UserError('image_preparation 须为 asset-sheet/auto/preserve')
         supplements=part_images(data.get('_part_images',[]))
         if supplements and (not isinstance(sources,list) or len(sources)!=1 or not isinstance(sources[0],dict) or sources[0].get('kind')!='rig'):raise UserError('补全部件目前只支持单个 rig 微调')
@@ -225,8 +236,24 @@ class AgentTasks(ReferenceRecovery):
                 if not clones:
                     c=CharacterProject.create(self.storage,'上传角色' if encoded_image is not None else 'Agent 生成角色');clones=[{'kind':'character','id':c.id,'original_id':None}]
                     if encoded_image is not None:c.set_image(image_bytes,0)
+                if material_edits is not None:
+                    if not isinstance(material_edits,list) or not 1<=len(material_edits)<=16:raise UserError('预置素材修整须为1–16项')
+                    c=self.loaders['character'](clones[0]['id'])
+                    for edit in material_edits:
+                        if not isinstance(edit,dict) or not isinstance(edit.get('part'),str) or edit.get('expected_sha256')!=c.meta.get('part_layers',{}).get(edit.get('part'),{}).get('image_id') or not edit.get('expected_sha256'):
+                            raise UserError('预置修整与当前源贴图摘要不一致，先重新检查素材')
+                    c.finish_parts({'revision':c.meta['revision'],'edits':material_edits})
+                if output_scope=='animation':
+                    from .assembly_stress import CONTRACT as STRESS_CONTRACT
+                    for source in clones:
+                        if source['kind']=='character':
+                            c=self.loaders['character'](source['id']);m=copy.deepcopy(c.meta);m['stress_contract']=STRESS_CONTRACT;c.save(m)
                 now=time.time()
+                if output_scope=='materials' and any(s['kind']!='character' for s in clones):raise UserError('素材交付仅支持 character 来源')
                 task={'id':id,'state':'queued','requirements':requirements.strip(),'sources':clones,
+                      'output_scope':output_scope,'automatic_animation_enabled':data.get('_material_animation',True) is not False,
+                      **({'material_animation':True} if data.get('_material_animation') is True and output_scope=='animation' else {}),
+                      **({'material_repairs_applied':[edit['part'] for edit in material_edits]} if material_edits is not None else {}),
                       'image_preparation':preparation,'image_assessments':{},'image_checks':{},
                       'max_generations':budget,'max_repairs':repairs,'timeout_seconds':timeout,
                       'created_at':now,'updated_at':now,'request_sha256':digest,'artifacts':[],
@@ -234,7 +261,7 @@ class AgentTasks(ReferenceRecovery):
                       'reservations':{},'calls':0,'edits':0,'motion_checks':{},'seam_contract':'neck-seam-v1','stage':'等待后台执行',
                       **({k:data['_'+k] for k in ('parent_task_id','refinement_artifact_index','refinement_request_sha256')} if data.get('_parent_task_id') else {}),
                       **({'web_session_id':data['_web_session_id'],'web_mode':data.get('_web_mode','image')} if data.get('_web_session_id') else {})}
-                for key in ('workflow_id','workflow_title','web_refine_sha256','web_refine_parent'):
+                for key in ('workflow_id','workflow_title','web_refine_sha256','web_refine_parent','web_request_summary','material_handoff_sha256'):
                     if '_'+key in data:task[key]=data['_'+key]
                 if preparation=='asset-sheet' and any(s['kind']=='character' for s in clones):
                     task['preparation_contract']='side-parts-v2'
@@ -242,6 +269,14 @@ class AgentTasks(ReferenceRecovery):
                     task['turnaround_contract']='three-view-v1'
                     task['detail_contract']='articulation-v1'
                 if any(s['kind']=='rig' and (self.loaders['rig'](s['id']).meta.get('turnaround_reference') or garment_anchors(self.loaders['rig'](s['id']).state['skeleton'])) for s in clones):task['detail_contract']='articulation-v1'
+                if output_scope=='animation' and any(
+                    s['kind']=='character' and self.loaders['character'](s['id']).meta.get('image_id') and self.loaders['character'](s['id']).asset_status()['ready'] or
+                    s['kind']=='rig' and self.loaders['rig'](s['id']).meta.get('canvas_layers') for s in clones):
+                    task['detail_contract']='articulation-v1'
+                if output_scope=='animation' and len(clones)==1 and clones[0]['kind']=='character' and data.get('_material_animation',True) is True:
+                    source=self.loaders['character'](clones[0]['id'])
+                    if source.meta.get('prebind_review',{}).get('verdict')=='ready' and source.asset_status()['ready']:
+                        task['material_animation']=True
                 if task.get('detail_contract')=='articulation-v1':
                     task['orientation_contract']=ORIENTATION_CONTRACT
                     task['connection_contract']=CONNECTION_CONTRACT
@@ -322,9 +357,10 @@ class AgentTasks(ReferenceRecovery):
             t=self.read(id)
             if t.get('resume_nonce')==request_nonce:return self.summary(id)
             if t['state'] not in ('failed','interrupted'):raise UserError('仅未完成或中断的制作可以继续')
-            t.setdefault('execution_attempts',[]).append({'state':t['state'],'error':t.get('error'),'ended_at':t.get('updated_at')})
+            t.setdefault('execution_attempts',[]).append({'state':t['state'],'error':t.get('error'),'worker_failure':t.get('worker_failure'),'ended_at':t.get('updated_at')})
             t.update(state='queued',stage='复用已有素材继续制作',resume_nonce=request_nonce,updated_at=time.time())
             t.pop('error',None)
+            t.pop('worker_failure',None)
             if self.reference_request_path(id).exists():
                 t['reference_recovery']={'state':'replaying','started_at':time.time(),'deadline':time.time()+1800,'attempts':0}
             prior=self.path(id).parent/'agent-result.json'
@@ -338,7 +374,8 @@ class AgentTasks(ReferenceRecovery):
             task=self.read(id)
             if task['state'] in TERMINAL:return self.summary(id)
             self.update(id,state='cancelled',stage='已取消；已提交生图仍保留编号')
-            if self.active==id and self.process:self.process.terminate()
+            process=self.processes.get(id)
+            if process:process.terminate()
         return self.summary(id)
 
     def api(self,route,data=None,binary=False):
@@ -449,25 +486,41 @@ class AgentTasks(ReferenceRecovery):
                     raise UserError('本次生图提交状态尚未确认，停止新提交；请先核实并查询原任务，避免重复计费')
 
     def tool(self,id,name,args):
-        with self.tool_lock:
-            try:return self._tool(id,name,args)
+        with self.task_locks.for_task(id):
+            try:
+                from .stages import run_stage
+                stage='vision' if name in ('spine_assess_image','spine_review_parts','spine_review_turnaround','spine_review_regions') else 'tool:'+name
+                return run_stage(self,id,stage,sha(json.dumps(args,sort_keys=True).encode()),lambda:self._tool(id,name,args))
             except ProviderError as error:
                 self.defer_reference(id,name,args,error)
                 raise
 
     def _tool(self,id,name,args):
-        with self.tool_lock:
+        with self.task_locks.for_task(id):
             t=self.read(id)
             if t['state'] not in ('queued','running'):raise UserError('任务已结束，不能继续调用工具')
             if t['calls']>=512:raise UserError('超过工具调用上限')
             t['calls']+=1;t['stage']=name;self.save_tool_state(t)
-            if name=='spine_context':return {'image_generation':self.image_provider_info(),'requirements':t['requirements'],'sources':t['sources'],'owned':t['owned'],'budget':self.summary(id)['generation_budget'],'max_repairs':t['max_repairs'],'edit_budget':{'used':t['edits'],'limit':max(1,len(t['sources']))*(t['max_repairs']+1)},'image_preparation':t.get('image_preparation','preserve'),'image_assessments':t.get('image_assessments',{}),'turnaround_contract':t.get('turnaround_contract'),'turnaround_checks':t.get('turnaround_checks',{}),'canvas_contract':t.get('canvas_contract'),'connection_contract':t.get('connection_contract'),'orientation_contract':t.get('orientation_contract'),'integrity_contract':t.get('integrity_contract'),'garment_contract':t.get('garment_contract'),'detail_contract':t.get('detail_contract'),'seam_contract':t.get('seam_contract'),'preparation_contract':t.get('preparation_contract'),'part_checks':t.get('part_checks',{}),'production_reference':copy.deepcopy(REFERENCE_PROFILE),'capabilities':['runtime-motion-diagnostics','reviewed-part-layout','continuous-limb-mesh','pixel-sole-contact','continuous-limb-prompts','pixel-contact-diagnostics','smooth-gait-curves','simple-result-view','concise-art-prompts','safe-generation-failures','character-asset-sheet-first','side-walk-preparation','joint-reviewed-assembly','polygon-part-crops','neck-seam-closeups','scoped-texture-repair','scoped-material-finish','contrast-material-review','turnaround-reference-review','multi-region-closeups','asset-integrity-review','costume-completion','strict-layer-anchors','garment-occlusion-review','isolated-limb-preview','runtime-preview-cache','parallel-runtime-sampling','platform-review-bundle','scoped-edge-cleanup','per-side-orientation-review','natural-walk-posture','assembly-connection-review','reviewed-occlusion-overlay','assembly-source-snapshot']}
+            if name=='spine_images':
+                requests=args.get('images')
+                if not isinstance(requests,list) or not 1<=len(requests)<=8:raise UserError('批量检查图须为1–8项')
+                for item in requests:
+                    if not isinstance(item,dict):raise UserError('检查图参数须为对象')
+                    self.own(t,item.get('kind'),item.get('id'))
+                content=[]
+                for item in requests:
+                    result=self._tool(id,'spine_image',item);content.extend(result['content'])
+                return {'content':content}
+            if name=='spine_context':return {'image_generation':self.image_provider_info(),'requirements':t['requirements'],'sources':t['sources'],'owned':t['owned'],'automatic_animation_enabled':t.get('automatic_animation_enabled',True),'animation_transitions':t.get('animation_transitions',{}),'material_animation':t.get('material_animation',False),'automatic_animation':t.get('automatic_animation',{}),'budget':self.summary(id)['generation_budget'],'max_repairs':t['max_repairs'],'edit_budget':{'used':t['edits'],'limit':max(1,len(t['sources']))*(t['max_repairs']+1)},'image_preparation':t.get('image_preparation','preserve'),'image_assessments':t.get('image_assessments',{}),'turnaround_contract':t.get('turnaround_contract'),'turnaround_checks':t.get('turnaround_checks',{}),'canvas_contract':t.get('canvas_contract'),'connection_contract':t.get('connection_contract'),'orientation_contract':t.get('orientation_contract'),'integrity_contract':t.get('integrity_contract'),'garment_contract':t.get('garment_contract'),'detail_contract':t.get('detail_contract'),'seam_contract':t.get('seam_contract'),'preparation_contract':t.get('preparation_contract'),'part_checks':t.get('part_checks',{}),'production_reference':copy.deepcopy(REFERENCE_PROFILE),'capabilities':['runtime-motion-diagnostics','reviewed-part-layout','continuous-limb-mesh','pixel-sole-contact','continuous-limb-prompts','pixel-contact-diagnostics','smooth-gait-curves','simple-result-view','concise-art-prompts','safe-generation-failures','character-asset-sheet-first','side-walk-preparation','joint-reviewed-assembly','polygon-part-crops','neck-seam-closeups','scoped-texture-repair','scoped-material-finish','contrast-material-review','turnaround-reference-review','multi-region-closeups','asset-integrity-review','costume-completion','strict-layer-anchors','garment-occlusion-review','isolated-limb-preview','runtime-preview-cache','parallel-runtime-sampling','platform-review-bundle','scoped-edge-cleanup','per-side-orientation-review','natural-walk-posture','assembly-connection-review','reviewed-occlusion-overlay','assembly-source-snapshot']}
             if name=='spine_deliver_draft':return self.publish_draft(id,args['id'],args['summary'])
             if name=='spine_assess_image':
                 entity=args['id'];self.own(t,'character',entity);c=self.loaders['character'](entity)
                 image_id=c.meta.get('image_id')
                 if not image_id or t.get('image_checks',{}).get(entity)!=image_id:raise UserError('先用 spine_image 查看当前角色原图，再记录视角与遮挡检查')
                 assessment=checked_assessment(args,image_id)
+                from .animation_transition import enabled
+                if assessment['parts_reviewed'] and c.asset_status()['ready'] and enabled(t,entity):
+                    t.update(detail_contract='articulation-v1',orientation_contract=ORIENTATION_CONTRACT,connection_contract=CONNECTION_CONTRACT,integrity_contract=INTEGRITY_CONTRACT,garment_contract=GARMENT_CONTRACT)
                 if t.get('preparation_contract')=='side-parts-v2' and assessment['verdict']=='ready':
                     require_side_camera(assessment,t['requirements'])
                     if assessment['parts_reviewed'] and not all(checked_connections(assessment.get('joint_review')).values()):
@@ -477,22 +530,31 @@ class AgentTasks(ReferenceRecovery):
                 if t.get('orientation_contract')==ORIENTATION_CONTRACT and assessment['parts_reviewed']:
                     assessment['orientation_checks']=checked_orientation(args)
                 if t.get('image_preparation')=='asset-sheet' and assessment['parts_reviewed']:
-                    if t.get('assembly_checks',{}).get(entity)!=c.meta['revision']:raise UserError('先查看当前版本的 assembly 组装图，再记录部件已检查')
+                    from .animation_transition import assembly_seen
+                    if not assembly_seen(t,c):raise UserError('先查看当前版本的 assembly 组装图，再记录部件已检查')
                     if not c.asset_status()['ready']:raise UserError('完整部件尚未全部接入，请检查缺失部件与连续臂／腿鞋链')
                 if assessment['source_kind']=='asset_sheet' and not t.get('reservations'):
                     t.pop('turnaround_contract',None) # user-supplied complete parts, no paid reference required
                 assessment['revision']=c.meta['revision'];assessment['recorded_at']=time.time()
+                if assessment['parts_reviewed'] and c.asset_status()['ready']:assessment['source_digest']=c.prebind_evidence()[0]['digest']
                 t.setdefault('image_assessments',{})[entity]=assessment;self.save_tool_state(t)
-                return assessment
+                from .animation_transition import advance
+                transition=advance(self,id,entity)
+                built=self.read(id).get('automatic_animation',{}).get(entity) if transition and transition['phase'] in ('review_pending','review_preparing','review_ready') else None
+                return {**assessment,**({'animation_transition':transition} if transition else {}),**({'automatic_animation':built} if built else {})}
             if name=='spine_review_turnaround':
                 from .turnaround_review import checked_review,candidate
                 entity=args['id'];self.own(t,'character',entity);c=self.loaders['character'](entity);job_id=nonce(args['job_id'])
                 evidence=candidate(c,job_id);review=checked_review(args)
                 if t.get('candidate_checks',{}).get(entity+':'+job_id)!=c.meta['image_id'] or t.get('candidate_pixel_checks',{}).get(entity+':'+job_id)!=evidence['sha256']:raise UserError('先用spine_image candidate实际查看当前三视图像素')
-                if review['phase']=='assembly' and t.get('assembly_checks',{}).get(entity)!=c.meta['revision']:raise UserError('先查看当前assembly再对照三视图')
+                from .animation_transition import assembly_seen,advance
+                if review['phase']=='assembly' and not assembly_seen(t,c):raise UserError('先查看当前assembly再对照三视图')
                 review.update(**evidence,revision=c.meta['revision'],recorded_at=time.time())
+                if review['phase']=='assembly':review['source_digest']=c.prebind_evidence()[0]['digest']
                 t.setdefault('turnaround_checks',{}).setdefault(entity,{})[review['phase']]=review
-                self.save_tool_state(t);return review
+                self.save_tool_state(t)
+                transition=advance(self,id,entity)
+                return {**review,**({'animation_transition':transition} if transition else {})}
             if name=='spine_review_parts':
                 entity=args['id'];self.own(t,'character',entity);c=self.loaders['character'](entity);job_id=args.get('job_id')
                 key=entity+':'+str(job_id or 'source')
@@ -543,28 +605,40 @@ class AgentTasks(ReferenceRecovery):
                         rig=self.loaders['rig'](entity);material=next((r for r in rig.meta.get('material_sources',[]) if r['id']==args.get('part')),None)
                         if material is None:raise UserError('找不到当前骨架保留的原像素参考')
                         content=rig.blob(material)
-                    elif kind=='character' and view in ('image','assembly','reconstruction-image','layer-overlap-image','prebind-parts','prebind-assembly','prebind-spread'):pass
+                    elif kind=='character' and view=='stress-image':
+                        from .assembly_stress import panel
+                        manifest,_,content=panel(self.loaders['character'](entity),args.get('part'))
+
+                        if args.get('crop') is None:t.setdefault('stress_seen',{}).setdefault(entity,{})[args.get('part')]=manifest['digest'];self.save_tool_state(t)
+                    elif kind=='character' and view in ('image','assembly','reconstruction-image','layer-overlap-image','prebind-parts','prebind-assembly','prebind-spread','edge-review-image'):pass
                     elif content is not None:pass
                     elif view=='part':
                         from urllib.parse import urlencode
                         query='?'+urlencode({'name' if kind=='character' else 'id':args['part']})
                     else:raise UserError('图像只支持单图原图／组装图或指定部件')
                     from PIL import Image
-                    im=Image.open(io.BytesIO(content if content is not None else self.api(route+'/'+view+query,binary=True)));pixel_size=im.size;im.thumbnail((1024,1024))
-                    if kind=='character' and view=='image':
+                    raw_image=content if content is not None else self.api(route+'/'+view+query,binary=True)
+                    im=Image.open(io.BytesIO(raw_image));pixel_size=im.size
+                    from .image_evidence import select
+                    im,selection=select(im,args,view)
+                    if kind=='character' and view=='image' and args.get('crop') is None:
                         t.setdefault('image_checks',{})[entity]=self.loaders['character'](entity).meta['image_id'];self.save_tool_state(t)
-                    elif kind=='character' and view.startswith('prebind-'):
+                    elif kind=='character' and view.startswith('prebind-') and args.get('crop') is None and args.get('pose') is None:
                         t.setdefault('prebind_seen',{}).setdefault(entity,{})[view]=self.loaders['character'](entity).prebind_evidence()[0]['digest'];self.save_tool_state(t)
                     elif kind=='character' and view=='layer-overlap-image':
                         t.setdefault('overlap_seen',{})[entity]=self.loaders['character'](entity).layer_overlap()[0]['digest'];self.save_tool_state(t)
                     elif kind=='character' and view=='reconstruction-image':
                         t.setdefault('reconstruction_seen',{})[entity]=self.loaders['character'](entity).reconstruction()[0]['digest'];self.save_tool_state(t)
-                    elif kind=='character' and view=='assembly':
-                        t.setdefault('assembly_checks',{})[entity]=self.loaders['character'](entity).meta['revision'];self.save_tool_state(t)
+                    elif kind=='character' and view=='assembly' and args.get('crop') is None:
+                        c=self.loaders['character'](entity)
+                        if sha(raw_image)!=sha(png_bytes(c.assembly())):raise UserError('读取期间组装已变化，请重新查看当前图')
+                        t.setdefault('assembly_checks',{})[entity]=c.meta['revision']
+                        if c.asset_status()['ready']:t.setdefault('assembly_digests',{})[entity]=c.prebind_evidence()[0]['digest']
+                        self.save_tool_state(t)
                     elif kind=='character' and view=='candidate':
                         t.setdefault('candidate_checks',{})[entity+':'+job_id]=self.loaders['character'](entity).meta['image_id'];t.setdefault('candidate_pixel_checks',{})[entity+':'+job_id]=sha(content);self.save_tool_state(t)
                     return {'content':[{'type':'image','mimeType':'image/png','data':base64.b64encode(png_bytes(im.convert('RGBA'))).decode()},
-                                       {'type':'text','text':json.dumps({'view':view,'pixel_size':list(pixel_size),'preview_size':list(im.size),'crop_coordinates':'Use original pixel_size coordinates for box/pieces, not thumbnail pixels.'})}]}
+                                       {'type':'text','text':json.dumps({'view':view,'selection':selection,'pixel_size':list(pixel_size),'preview_size':list(im.size),'crop_coordinates':'Use original pixel_size coordinates for box/pieces, not thumbnail pixels.'})}]}
                 action=args['action'];payload=args.get('data',{})
                 if t.get('image_preparation')=='asset-sheet' and 'sheets' not in payload and (action=='generate-parts' or action=='generation-plan' and payload.get('mode')=='complete-parts'):
                     payload={**payload,'sheets':['turnaround','character-assets'] if t.get('turnaround_contract') else ['character-assets']}
@@ -573,11 +647,22 @@ class AgentTasks(ReferenceRecovery):
                     from .turnaround_review import require_review
                     try:require_review(t,self.loaders['character'](entity),'reference')
                     except UserError:payload={**payload,'sheets':['turnaround',*payload['sheets']]}
+                if action=='generate-parts' or action=='generation-plan' and payload.get('mode')=='complete-parts':
+                    from .part_prompts import complete_generation_request
+                    payload=complete_generation_request(payload)
+                if action in ('generate-parts','generation-plan') and payload.get('completion_only'):
+                    from .garment_templates import generation_request
+                    prepared,_=generation_request(self.loaders['character'](entity),payload)
+                    payload={**payload,'sheets':prepared['sheets']}
                 t['stage_detail']=action;self.save_tool_state(t)
                 if action not in CHAR_ACTIONS:raise UserError('不允许此单图操作')
                 plan=payload if action=='prepare-assembly' else payload.get('assembly_plan',{})
                 if not isinstance(plan,dict):raise UserError('装配方案须为对象')
                 for replacement in plan.get('replacements',[]):self.own(t,'character',replacement.get('character_id'))
+                if action=='review-stress':
+                    from .assembly_stress import read_manifest
+                    manifest=read_manifest(self.loaders['character'](entity))
+                    if any(t.get('stress_seen',{}).get(entity,{}).get(p['key'])!=manifest['digest'] for p in manifest['panels']):raise UserError('先逐张查看当前骨骼压力测试全身、腰胯与肩带图')
                 if action=='review-prebind' and any(t.get('prebind_seen',{}).get(entity,{}).get(v)!=payload.get('digest') for v in ('prebind-parts','prebind-assembly','prebind-spread')):raise UserError('先查看当前完整部件、试拼和摆开三张图')
                 if action=='review-overlap' and t.get('overlap_seen',{}).get(entity)!=payload.get('digest'):raise UserError('先查看当前layer-overlap-image')
                 if action=='review-reconstruction' and t.get('reconstruction_seen',{}).get(entity)!=payload.get('digest'):raise UserError('先查看当前reconstruction-image，再记录拼回验收')
@@ -604,7 +689,8 @@ class AgentTasks(ReferenceRecovery):
                     if t.get('candidate_checks',{}).get(entity+':'+str(payload.get('job_id','')))!=c.meta['image_id']:raise UserError('先查看候选部件图，再应用实际裁片与关节')
                 if action in ('build','generate-view','generate-parts'):
                     c=self.loaders['character'](entity);assessment=t.get('image_assessments',{}).get(entity,{})
-                    if assessment.get('image_id')!=c.meta.get('image_id') or assessment.get('revision')!=c.meta['revision']:raise UserError('角色图或部件已变化，请查看图片并重新记录适配检查')
+                    assessment_current=(assessment.get('source_digest')==c.prebind_evidence()[0]['digest'] if action=='build' and assessment.get('source_digest') else assessment.get('revision')==c.meta['revision'])
+                    if assessment.get('image_id')!=c.meta.get('image_id') or not assessment_current:raise UserError('角色图或部件已变化，请查看图片并重新记录适配检查')
                     if action in ('build','generate-parts') and t.get('preparation_contract')=='side-parts-v2':require_side_camera(assessment,t['requirements'])
                     if action=='build' and assessment.get('verdict')!='ready':raise UserError('图片尚不适合目标动作，请先补视角／部件或说明无法制作')
                     if action=='build' and t.get('orientation_contract')==ORIENTATION_CONTRACT:
@@ -612,7 +698,8 @@ class AgentTasks(ReferenceRecovery):
                     if action=='build' and t.get('integrity_contract')==INTEGRITY_CONTRACT:
                         checked_material_review(assessment)
                     if action=='build' and t.get('image_preparation')=='asset-sheet':
-                        if not c.asset_status()['ready'] or not assessment.get('parts_reviewed') or t.get('assembly_checks',{}).get(entity)!=c.meta['revision']:raise UserError('先接入完整部件，查看当前 assembly 并记录 parts_reviewed=true，再绑定动画')
+                        from .animation_transition import assembly_seen
+                        if not c.asset_status()['ready'] or not assessment.get('parts_reviewed') or not assembly_seen(t,c):raise UserError('先接入完整部件，查看当前 assembly 并记录 parts_reviewed=true，再绑定动画')
                     if action=='generate-view':
                         if t.get('image_preparation') not in ('auto','asset-sheet'):raise UserError('当前要求保留原图，不允许自动换视角')
                         if assessment.get('verdict')!='needs_view':raise UserError('检查记录未要求补视角')
@@ -622,11 +709,23 @@ class AgentTasks(ReferenceRecovery):
                     if action=='generate-parts':
                         if t.get('image_preparation')=='asset-sheet' and 'sheets' not in payload:payload={**payload,'sheets':['turnaround','character-assets'] if t.get('turnaround_contract') else ['character-assets']}
                         from .part_prompts import generation_plan
-                        generation_plan({**payload,'mode':'complete-parts'},c.meta['settings']['facing'])
+                        from .garment_templates import generation_request
+                        prepared,_=generation_request(c,{**payload,'mode':'complete-parts'})
+                        generation_plan(prepared,c.meta['settings']['facing'])
                     key=nonce(payload.get('nonce'));count=len(selected_sheets(payload.get('sheets'))) if action=='generate-parts' else 1
                     if entity+':'+key not in t['reservations']:self.guard_generation(t)
                     self.reserve(t,entity+':'+key,count,payload,selected_sheets(payload.get('sheets')) if action=='generate-parts' else ())
                 result=self.api(route+'/'+action,payload)
+                from .generation_flow import MATERIAL_ACTIONS,prepare
+                if action in MATERIAL_ACTIONS:
+                    prepare(self,id,entity)
+                    t=self.read(id)
+                if action in MATERIAL_ACTIONS:
+                    from .animation_transition import advance
+                    transition=advance(self,id,entity);t=self.read(id)
+                    if transition:result={**result,'animation_transition':transition}
+                    built=t.get('automatic_animation',{}).get(entity) if transition and transition['phase'] in ('review_pending','review_preparing','review_ready') else None
+                    if built:result['automatic_animation']=built
                 if action=='build' and t.get('turnaround_contract'):
                     # Saving a version increments revision without changing the reviewed artwork.
                     t['turnaround_checks'][entity]['assembly']['revision']=result['revision']
@@ -878,6 +977,9 @@ class AgentTasks(ReferenceRecovery):
                 if self.read(id)['state']!='cancelled':
                     self.update(id,state='failed',stage='处理未完成',error=str(result.get('summary','AI 未完成此需求'))[:1000])
             return
+        if t.get('output_scope')=='materials':
+            from .generation_flow import finish_materials
+            return finish_materials(self,t,result)
         artifacts=result.get('artifacts')
         if not isinstance(artifacts,list) or not artifacts:raise UserError('没有可交付资源，不标记为完成')
         out=io.BytesIO();deliver=[]
@@ -943,8 +1045,8 @@ class AgentTasks(ReferenceRecovery):
                 final_skeleton=(self.loaders[check_kind](check_id).state['skeleton'] if check_kind=='rig' else self.loaders[check_kind](check_id).skeleton_data)
                 if final_skeleton.get('skeleton',{}).get('gait',{}).get('posture_policy')=='natural-walk-v2' and 'walk' in required:
                     posture=self.contact_check(checked_content,'walk')
-                    if posture.get('status')!='assessed' or posture.get('posture_checks_passed') is not True:
-                        raise UserError('自然行走的实际膝弯超过支撑35°／摆动50°，或尚无法测量；请修正骨架与抬脚高度后复检，可先交付草稿')
+                    from .contact_diagnostics import require_natural_walk_contact
+                    require_natural_walk_contact(posture)
                 filename=f'{i+1:02d}-{kind}-{entity}.zip';z.writestr(filename,content)
                 preview=('/result.html?rig='+check_id if kind in ('rig','character') else '/?project='+entity)
                 if kind in ('rig','character') and 'walk' in report['animations']:preview+='&animation=walk'
@@ -973,11 +1075,14 @@ class AgentTasks(ReferenceRecovery):
         status=ImageProvider(self.storage).status()
         return {key:status[key] for key in ('provider','model','reference_transport','configured')}
 
-    def command(self,id,output):
+    def command(self,id,output,model_config=None):
         executable=os.getenv('SPINE_AGENT_CODEX') or shutil.which('codex')
         if not executable:raise UserError('服务机器未安装 Codex CLI')
         token_env='SPINE_AGENT_TOKEN'
-        configs={'mcp_servers.spine.command':sys.executable,
+        if model_config is None:
+            from .worker_config import model_configuration
+            model_config,_=model_configuration()
+        configs={**model_config,'mcp_servers.spine.command':sys.executable,
                  'mcp_servers.spine.args':[str(self.root/'agent/spine_mcp.py'),'--base',self.base,'--task',id],
                  'mcp_servers.spine.env_vars':[token_env],
                  'mcp_servers.spine.required':True,'mcp_servers.spine.tool_timeout_sec':90,
@@ -986,6 +1091,21 @@ class AgentTasks(ReferenceRecovery):
              '--output-schema',str(self.root/'agent/result.schema.json'),'-o',str(output)]
         for key,value in configs.items():cmd.extend(['-c',key+'='+json.dumps(value,ensure_ascii=False)])
         cmd.append('-');return cmd
+
+    def worker_failure(self,directory):
+        """Classify local worker errors without exposing raw logs or secrets."""
+        path=Path(directory)/'events.jsonl'
+        lines=path.read_text(errors='replace').splitlines()[-12:] if path.exists() else []
+        messages=[]
+        for line in lines:
+            try:event=json.loads(line)
+            except ValueError:continue
+            if event.get('type')=='error':messages.append(str(event.get('message','')))
+            if event.get('type')=='turn.failed':messages.append(str(event.get('error',{}).get('message','')))
+        text=' '.join(messages)
+        if '401' in text or 'invalid_api_key' in text:
+            return {'code':'worker_authentication_failed','message':'后台模型认证失败（401），请管理员检查后台模型登录与凭据；已准备的素材保留，可恢复原任务，无需重新生图。'}
+        return {'code':'worker_execution_failed','message':'后台助手执行失败；已保存素材保留，请检查服务端日志后继续原任务。'}
 
     def execute(self,id):
         directory=self.path(id).parent;result_path=directory/'agent-result.json'
@@ -1000,37 +1120,64 @@ class AgentTasks(ReferenceRecovery):
                 if self.read(id)['state']!='queued':return
                 self.update(id,state='running',stage='恢复原请求' if self.read(id).get('reference_recovery',{}).get('state')=='replaying' else 'Codex 自动编排')
             self.replay_reference_request(id)
+            from .generation_flow import prepare
+            for source in self.read(id)['sources']:
+                if source['kind']=='character':
+                    if self.read(id)['state']!='running':return
+                    self.update(id,stage='平台自动准备素材')
+                    from .stages import run_stage
+                    run_stage(self,id,'material-preparation',str(self.loaders['character'](source['id']).meta['revision']),lambda:prepare(self,id,source['id']))
+            prompt+='\nPlatform checkpoints (reuse completed outputs; only revisit failed/stale stages; focus on visual decisions): '+json.dumps(self.read(id).get('stage_checkpoints',{}),ensure_ascii=False)
             prompt+='\nTask ID: '+id+'\n'+json.dumps(self.summary(id),ensure_ascii=False)
-            cmd=self.command(id,result_path)
+            from .worker_config import model_configuration
+            model_config,provider_env=model_configuration(env)
+            env.update(provider_env)
+            cmd=self.command(id,result_path,model_config)
             with self.lock:
                 if self.read(id)['state']!='running':return
                 self.update(id,stage='Codex 自动编排')
                 trace=open(directory/'events.jsonl','w');errors=open(directory/'stderr.log','w')
-                self.process=subprocess.Popen(cmd,cwd=directory,stdin=subprocess.PIPE,stdout=trace,stderr=errors,text=True,env=env)
-                self.active=id
-            try:self.process.communicate(prompt,timeout=self.read(id)['timeout_seconds'])
+                process=subprocess.Popen(cmd,cwd=directory,stdin=subprocess.PIPE,stdout=trace,stderr=errors,text=True,env=env)
+                self.processes[id]=process;self.active_tasks.add(id)
+            try:
+                from .stages import run_stage
+                run_stage(self,id,'model-session',str(self.read(id).get('execution_attempts',[])),lambda:process.communicate(prompt,timeout=self.read(id)['timeout_seconds']) and {'returncode':process.returncode})
             except subprocess.TimeoutExpired:
-                self.process.kill();self.process.wait();raise UserError('任务达到时间上限；已提交生图编号保留，不会自动重提')
+                process.kill();process.wait();raise UserError('任务达到时间上限；已提交生图编号保留，不会自动重提')
             finally:trace.close();errors.close()
             if self.read(id)['state'] in ('cancelled','waiting_reference'):return
-            if self.process.returncode or not result_path.exists():raise UserError('Codex 执行失败；检查服务端日志及 CLI 登录状态')
+            if process.returncode or not result_path.exists():
+                failure=self.worker_failure(directory);self.update(id,worker_failure=failure)
+                raise UserError(failure['message'])
             self.update(id,stage='校验并打包成果');self.finish(id,json.loads(result_path.read_text()))
         except Exception as e:
             with self.lock:
                 if self.read(id)['state'] not in ('cancelled','waiting_reference'):self.update(id,state='failed',stage='处理未完成',error=str(e)[:1000] if isinstance(e,UserError) else '后台处理失败，任务和生成编号已保留')
         finally:
-            with self.lock:self.process=None;self.active=None
+            with self.lock:self.processes.pop(id,None);self.active_tasks.discard(id)
 
     def run(self):
         self.tasks.mkdir(parents=True,exist_ok=True)
         # A interrupted model run is never silently rerun and billed again.
         for p in self.tasks.glob('*/task.json'):
             if json.loads(p.read_text())['state']=='running':self.update(p.parent.name,state='interrupted',stage='服务重启，保留所有生成与成果记录')
-        while not self.stop.is_set():
-            self.recover_references()
-            queued=sorted((p for p in self.tasks.glob('*/task.json') if json.loads(p.read_text())['state']=='queued'),key=lambda p:p.stat().st_mtime)
-            if queued:self.execute(queued[0].parent.name)
-            else:self.wake.wait(3);self.wake.clear()
+        from concurrent.futures import ThreadPoolExecutor
+        # Default two sessions after persistent timing is available; hard cap four.
+        try:limit=max(1,min(4,int(os.getenv('SPINE_AGENT_CONCURRENCY','2'))))
+        except ValueError:limit=2
+        with ThreadPoolExecutor(max_workers=limit,thread_name_prefix='spine-task') as pool:
+            pending={}
+            while not self.stop.is_set():
+                for tid,future in list(pending.items()):
+                    if future.done():
+                        try:future.result()
+                        except Exception:pass  # execute persists the concrete task failure
+                        pending.pop(tid,None)
+                self.recover_references()
+                queued=sorted((p for p in self.tasks.glob('*/task.json') if json.loads(p.read_text())['state']=='queued' and p.parent.name not in pending),key=lambda p:p.stat().st_mtime)
+                for path in queued[:max(0,limit-len(pending))]:pending[path.parent.name]=pool.submit(self.execute,path.parent.name)
+                self.wake.wait(1);self.wake.clear()
+
 
     def download(self,id):
         t=self.read(id)

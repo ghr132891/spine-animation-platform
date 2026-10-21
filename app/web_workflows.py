@@ -130,6 +130,7 @@ class WebWorkflows:
         return result
 
     def public(self,t):
+        from .stages import public as stage_timings
         ready=t['state']=='completed'
         detail=t.get('stage_detail','') if t.get('stage')=='spine_character' else ''
         stage={'waiting_reference':'等待参考图恢复（自动继续）','queued':'排队等待','completed':'制作完成','failed':'本次未完成','cancelled':'已停止','interrupted':'处理已中断'}.get(t['state'])
@@ -156,7 +157,9 @@ class WebWorkflows:
                 'steps':steps,'step':index,'error':t.get('error'),'summary':t.get('summary',''),'artifacts':result,
                 'download_url':'/api/workflows/tasks/'+t['id']+'/download' if ready else None,
                 'image_url':'/api/characters/'+t['sources'][0]['id']+'/image' if t['sources'] and t['sources'][0]['kind']=='character' and self.agent.loaders['character'](t['sources'][0]['id']).meta.get('image_id') else None,
-                'image_assessments':t.get('image_assessments',{}),'generation_budget':t.get('generation_budget',{})}
+                'image_assessments':t.get('image_assessments',{}),'generation_budget':t.get('generation_budget',{}),
+                'stage_timings':stage_timings(t),'animation_transitions':list(t.get('animation_transitions',{}).values()),'material_preparation':list(t.get('material_preparation',{}).values()),'worker_failure':t.get('worker_failure'),
+                'material_delivery':t.get('material_delivery'),'output_scope':t.get('output_scope','animation')}
 
     def visible_tasks(self,s):
         self.require(s)
@@ -180,7 +183,7 @@ class WebWorkflows:
                           attempts=[{'id':t['id'],'state':t['state'],'error':t.get('error'),
                                      'created_at':t['created_at']} for t in members]+[{'id':t['id'],'state':a['state'],'error':a.get('error'),'created_at':a.get('ended_at') or t['created_at']} for t in members for a in t.get('execution_attempts',[])])
             result['requirements']=members[0].get('workflow_title',members[0]['requirements'])
-            if current.get('web_refine_parent'):result['current_request']=current['requirements']
+            if current.get('web_refine_parent'):result['current_request']=current.get('web_request_summary') or current['requirements']
             if not result.get('image_url'):result['image_url']=self.public(members[0]).get('image_url')
             result['updated_at']=current.get('updated_at',current['created_at'])
             deliveries=[d for t in members if (d:=self.delivery(t['id']))]
@@ -246,6 +249,36 @@ class WebWorkflows:
             session_id=parent.get('web_session_id') if parent else s['id']
             if session_id:request.update(_web_session_id=session_id,_web_mode='refine')
             created=self.agent.create(request)
+            return self.read(s,created['id'])
+
+    def animate_materials(self,s,id,data):
+        """Continue an accepted material delivery in its existing browser record."""
+        self.require(s)
+        if not isinstance(data,dict) or not isinstance(data.get('nonce'),str) or not re.fullmatch('[a-f0-9]{32}',data['nonce']):raise WebError('请求编号无效')
+        signature=hashlib.sha256(json.dumps([id,data],sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+        with self.agent.lock:
+            if self.agent.path(data['nonce']).exists():
+                old=self.agent.read(data['nonce']);self.allowed(s,old)
+                if old.get('material_handoff_sha256')!=signature:raise WebError('此请求编号已用于其他制作')
+                return self.read(s,old['id'])
+            parent=self.agent.read(id);self.allowed(s,parent)
+            if self.read(s,id)['id']!=id:raise WebError('此制作已有更新成果，请刷新后继续')
+            delivered=parent.get('material_delivery',{}).get('characters',[])
+            if parent['state']!='completed' or parent.get('output_scope')!='materials' or len(delivered)!=1:raise WebError('先完成一套素材的验收与交付')
+            item=delivered[0];cid=item['character_id'];self.agent.own(parent,'character',cid)
+            c=self.agent.loaders['character'](cid)
+            with c.lock:
+                from .prebind import require
+                report,_=c.prebind_evidence();require(report,c.meta.get('prebind_review'))
+                if report['digest']!=item['digest']:raise WebError('素材已变化，请先重新验收，不能沿用旧版结论')
+                request={'nonce':data['nonce'],'sources':[{'kind':'character','id':cid,'revision':c.meta['revision']}],
+                    'requirements':'用这套已验收完整素材制作待机 idle 和自然朝右行走 walk，保留外观与修复，另存版本。先检查当前组装与视角，平台自动绑定并交付草稿，再完成全部动态局部、接地与循环验收。不得重新生图或回退旧素材。',
+                    'output_scope':'animation','image_preparation':'preserve','max_generations':0,'max_repairs':4,'timeout_seconds':1800,
+                    '_material_animation':True,'_material_handoff_sha256':signature,
+                    '_workflow_id':parent.get('workflow_id',id),'_workflow_title':parent.get('workflow_title',parent['requirements']),
+                    '_web_session_id':parent.get('web_session_id',s['id']),'_web_mode':'animation-from-materials','_web_refine_parent':id,
+                    '_web_request_summary':'使用这套已验收素材制作待机和自然行走，保留修复与旧版，不重新生图。'}
+                created=self.agent.create(request)
             return self.read(s,created['id'])
 
     def submit(self,s,data):

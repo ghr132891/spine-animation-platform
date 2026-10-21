@@ -28,6 +28,7 @@ def require_review(task,character,phase):
     record=task.get('turnaround_checks',{}).get(character.id,{}).get(phase,{})
     if record.get('verdict')!='ready':raise UserError('先查看并通过三视图'+('与当前组装的比对' if phase=='assembly' else '参考一致性检查'))
     current=candidate(character,record['job_id'])
-    if any(record.get(k)!=v for k,v in current.items()) or (phase=='assembly' and record.get('revision')!=character.meta['revision']):
+    assembly_current=(record.get('source_digest')==character.prebind_evidence()[0]['digest'] if record.get('source_digest') else record.get('revision')==character.meta['revision']) if phase=='assembly' else True
+    if any(record.get(k)!=v for k,v in current.items()) or not assembly_current:
         raise UserError('三视图或组装已变化，旧比对失效')
     return record

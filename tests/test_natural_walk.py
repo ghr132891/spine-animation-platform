@@ -6,6 +6,13 @@ from app.character import checked_settings, default_landmarks, make_skeleton, se
 from app.part_layers import aligned_part
 
 class NaturalWalkTests(unittest.TestCase):
+    def test_delivery_requires_contact_and_posture_not_just_a_measurement(self):
+        from app.contact_diagnostics import require_natural_walk_contact
+        from app.core import UserError
+        passed={'status':'assessed','posture_checks_passed':True,'numerical_checks_passed':True}
+        require_natural_walk_contact(passed)
+        for change in ({'numerical_checks_passed':False},{'posture_checks_passed':False},{'status':'not_assessed'}):
+            with self.assertRaises(UserError):require_natural_walk_contact({**passed,**change})
     def character(self, facing='right', lift=.25):
         im=Image.new('RGBA',(300,600),'orange');lm=default_landmarks(im)
         for side,x in [('l',.4),('r',.6)]:

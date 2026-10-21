@@ -151,6 +151,17 @@ class ReferenceGenerationTests(unittest.TestCase):
                                   else '两鞋保持指定参考视角', item['prompt'])
 
 
+    def test_omitted_fields_submit_two_complete_default_sheets_once(self):
+        payload={'nonce':uuid.uuid4().hex,'revision':self.character.meta['revision']}
+        result=self.post(payload)
+        self.assertEqual([j['sheet'] for j in result],['turnaround','character-assets'])
+        self.assertEqual(result[1]['groups'],{'torso':'costume'})
+        count=self.matrix.request.call_count
+        again=self.post(payload)
+        self.assertEqual([j['id'] for j in again],[j['id'] for j in result])
+        self.assertEqual(self.matrix.request.call_count,count)
+
+
 class CombinedReferenceBuildTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

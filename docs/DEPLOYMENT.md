@@ -108,3 +108,11 @@ python -m unittest discover -s tests -p 'test_*.py'
 上述测试包含需要 Node 的运行时检查；浏览器脚本见 tools/verify_*.cjs，部分历史实测脚本有原作者机器路径，不作为通用部署步骤。不要运行生图 smoke 脚本来代替离线测试，它们可能调用付费服务。
 
 `storage/` 是运行数据根目录，应由管理员另行备份和控制访问。Git 仅管理源码，拉取仓库不会恢复原服务器的素材、任务、生成历史和账号。官方 Spine runtime 的许可保留在 `web/runtime/*/LICENSE`，部署与分发应遵循其许可。
+
+### 后台模型认证 401 与自定义服务
+
+后台保留 `--ignore-user-config` 隔离用户 MCP、插件配置和权限，仅将本机 Codex 的当前 model、选中 profile、model_provider 及该服务定义传入子进程。认证仍由同一 CODEX_HOME 管理；静态认证头或内嵌 bearer 仅传入子进程环境，不写入命令行、网页或任务摘要。
+
+若桌面正常而后台 401，先核对后台请求地址是否与所选服务一致。此前忽略用户配置会丢失自定义 base_url，错误地将同一凭据用于默认接口。此问题已修复；无需因此更换密钥。实际服务仍拒绝认证时再检查该服务的凭据。修好后从原网页任务“继续这次制作”，保留素材、生成编号和预算，不重新提交。
+
+参考：[Codex 配置](https://learn.chatgpt.com/docs/config-file/config-reference)、[认证](https://learn.chatgpt.com/docs/auth)。

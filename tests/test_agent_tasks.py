@@ -45,8 +45,8 @@ class AgentTests(unittest.TestCase):
         p=subprocess.run([sys.executable,str(client)],input='\n'.join(map(json.dumps,requests))+'\n',text=True,capture_output=True,env=env)
         self.assertEqual(p.returncode,0,p.stderr)
         results=list(map(json.loads,p.stdout.splitlines()));self.assertEqual(len(results),2)
-        self.assertEqual(results[0]['result']['serverInfo']['version'],'1.10.0')
-        self.assertEqual(len(results[1]['result']['tools']),15)
+        self.assertEqual(results[0]['result']['serverInfo']['version'],(ROOT/'VERSION').read_text().strip())
+        self.assertEqual(len(results[1]['result']['tools']),16)
         submit=next(tool for tool in results[1]['result']['tools'] if tool['name']=='spine_submit')
         preparation=submit['inputSchema']['properties']['image_preparation']
         self.assertEqual(preparation['default'],'asset-sheet');self.assertEqual(set(preparation['enum']),{'asset-sheet','auto','preserve'})

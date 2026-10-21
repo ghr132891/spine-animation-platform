@@ -55,7 +55,7 @@ class CharacterOptimizationTests(unittest.TestCase):
             instructions='保留鞋带与背包通风口'
             plan=generation_plan({'mode':'complete-parts','instructions':instructions},'left')
             for item in plan['items']:
-                matrix.generate_part_sheet(item['sheet'],'https://example.com/reference.png',instructions,'left')
+                matrix.generate_part_sheet(item['sheet'],'https://example.com/reference.png',instructions,'left',body_layout=item['body_layout'])
                 submitted=matrix.request.call_args.args[1]
                 self.assertEqual(submitted['input']['prompt'],item['prompt'])
                 self.assertEqual(submitted['input']['input_images'],['https://example.com/reference.png'])

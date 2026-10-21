@@ -1,4 +1,4 @@
-Spine 动画助手 · Skill + MCP 安装包（1.10.2）
+Spine 动画助手 · Skill + MCP 安装包（1.11.0）
 
 用途
 在 Codex 中给角色图片或描述，制作 Spine 待机／行走动画。
@@ -45,7 +45,7 @@ python3 ~/.codex/skills/spine-animation/scripts/doctor.py
 如果设置了 CODEX_HOME，使用该目录下的 skills/spine-animation/scripts/doctor.py。
 Windows路径示例：
 py -3 "$HOME\.codex\skills\spine-animation\scripts\doctor.py"
-检测会验证平台连接、版本、MCP握手、15个工具和已注册连接，并读取参考图发布状态；不发布图片、不提交任务、不消耗生图积分。发布器未就绪时交由平台管理员处理，检测成功不代表实际生成已验收。
+检测会验证平台连接、版本、MCP握手、16个工具和已注册连接，并读取参考图发布状态；不发布图片、不提交任务、不消耗生图积分。发布器未就绪时交由平台管理员处理，检测成功不代表实际生成已验收。
 
 使用示例
 1. 在 Codex 中附上全身角色图，并说：

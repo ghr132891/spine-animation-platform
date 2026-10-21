@@ -95,11 +95,11 @@ def render_closeups(frames, directory, anchor, render, isolated=False):
         if any(not f['geometry'] for f in filtered):raise UserError('此 anchor 没有可隔离的同名附件，请使用组合图诊断')
         frames=filtered
     rows=(len(frames)+3)//4
-    contrast=anchor in ('__hip__','__back__','torso','l-upper-arm','r-upper-arm','l-upper-leg','r-upper-leg')
+    contrast=anchor in ('__hip__','__back__','__straps__','torso','l-upper-arm','r-upper-arm','l-upper-leg','r-upper-leg')
     sheet=Image.new('RGB',(1600,400*(rows+int(contrast))),'#e5ebf3');draw=ImageDraw.Draw(sheet)
     evidence=[]
     for i,frame in enumerate(frames):
-        bone_name={'__hair__':'head','__hip__':'hip','__back__':'torso'}.get(anchor,anchor)
+        bone_name={'__hair__':'head','__hip__':'hip','__back__':'torso','__straps__':'torso'}.get(anchor,anchor)
         bone=next((b for b in frame['bones'] if b['name']==bone_name),None)
         if bone is None:raise UserError('找不到局部参考骨骼，请按真实骨架提供 anchor')
         length=math.hypot(bone['ex']-bone['x'],bone['ey']-bone['y'])
@@ -146,6 +146,13 @@ def require_detail_reviews(review,digest,clips,anchors):
 
 def detail_view(frame,anchor):
     """Use actual animated geometry, including chain endpoints, not fixed screen boxes."""
+    if anchor=='__straps__':
+        bones={b['name']:b for b in frame['bones']};shoulders=[bones[n] for n in ('l-upper-arm','r-upper-arm') if n in bones]
+        if len(shoulders)!=2:raise UserError('肩带压力局部需要两侧肩骨')
+        x0=min(b['x'] for b in shoulders);x1=max(b['x'] for b in shoulders);top=max(b['y'] for b in shoulders)
+        torso=bones.get('torso',{});length=math.hypot(torso.get('ex',0)-torso.get('x',0),torso.get('ey',0)-torso.get('y',0))
+        margin=max((x1-x0)*.4,length*.22,10)
+        return [x0-margin,top-length*.9,x1+margin,top+margin]
     if anchor=='__hip__':
         bones={b['name']:b for b in frame['bones']};hip=bones.get('hip')
         if not hip:raise UserError('找不到髋部参考骨骼')

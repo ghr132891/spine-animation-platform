@@ -103,7 +103,7 @@ class PartPromptPlanningTests(unittest.TestCase):
         self.assertEqual((spec['columns'], spec['rows'], spec['ratio']), (2, 2, '1:1'))
         self.assertEqual(spec['parts'], ['head', 'torso', 'pelvis', 'back'])
         self.assertIn('reference backpack', part_prompt('body'))
-        legacy = generation_plan({'mode': 'complete-parts', 'instructions': '保留鞋带与背包通风口'})
+        legacy = generation_plan({'mode': 'complete-parts', 'sheets':['body','arms','legs'], 'instructions': '保留鞋带与背包通风口'})
         self.assertEqual([item['sheet'] for item in legacy['items']], ['body', 'arms', 'legs'])
         self.assertEqual(legacy['image_count'], 3)
         for item in legacy['items']:
@@ -156,14 +156,14 @@ class PartPromptPlanningTests(unittest.TestCase):
         for name in ('body', 'arms', 'legs'):
             self.assertFalse(sheet_spec(name)['requires_reviewed_layout'])
         self.assertFalse(sheet_spec('body', False)['requires_reviewed_layout'])
-        legacy = generation_plan({'mode': 'complete-parts'})
+        legacy = generation_plan({'mode': 'complete-parts','sheets':['body','arms','legs']})
         self.assertEqual([item['sheet'] for item in legacy['items']], ['body', 'arms', 'legs'])
         self.assertFalse(legacy['requires_reviewed_layout'])
         self.assertTrue(all(not item['requires_reviewed_layout'] for item in legacy['items']))
 
     def test_character_assets_is_one_wide_complete_layout_with_reviewed_crops(self):
-        plan = generation_plan({'mode': 'complete-parts', 'sheets': ['character-assets']})
-        self.assertEqual(plan['prompt_version'], 'animation-parts-v21')
+        plan = generation_plan({'mode': 'complete-parts', 'sheets': ['character-assets'], 'body_layout':'separate'})
+        self.assertEqual(plan['prompt_version'], 'animation-parts-v23')
         self.assertEqual(plan['image_count'], 1)
         self.assertTrue(plan['requires_reviewed_layout'])
         self.assertTrue(plan['requires_visual_review'])
@@ -181,7 +181,7 @@ class PartPromptPlanningTests(unittest.TestCase):
     def test_character_assets_without_back_keeps_empty_top_cell_and_original_limb_slots(self):
         before = copy.deepcopy(SHEETS['character-assets'])
         plan = generation_plan({'mode': 'complete-parts', 'sheets': ['character-assets'],
-                                'include_back': False})
+                                'include_back': False,'body_layout':'separate'})
         item = plan['items'][0]
         self.assertEqual((item['columns'], item['rows'], item['ratio']), (4, 2, '3:2'))
         self.assertEqual(item['parts'], ['head', 'torso', 'pelvis',
@@ -364,6 +364,32 @@ class PartPromptRequestTests(unittest.TestCase):
     def persisted(self, job):
         return json.loads(self.history.path(self.character.id, job['id']).read_text())
 
+    def test_garment_template_is_used_in_actual_provider_request_and_job(self):
+        from app.garment_templates import generation_request
+        payload=self.request(sheets=['character-assets'],garment_template={'type':'trousers'})
+        prepared,t=generation_request(self.character,{**payload,'mode':'complete-parts'})
+        expected=generation_plan(prepared)['items'][0]['prompt']
+        job=self.post(payload)[0]
+        self.assertEqual(job['garment_template']['digest'],t['digest'])
+        self.assertEqual(self.character.meta['garment_template']['digest'],t['digest'])
+        self.assertEqual(self.matrix.request.call_args.args[1]['input']['prompt'],expected)
+        self.assertEqual(job['prompt'],expected)
+        self.matrix.request.reset_mock()
+        self.assertEqual(self.post(payload)[0],job)
+        self.matrix.request.assert_not_called()
+
+    def test_targeted_completion_submits_only_missing_costume_sheet(self):
+        template={'type':'trousers','missing_regions':[{'part':'l-upper-leg','box':[10,10,30,30],'reason':'missing hip cloth'}]}
+        jobs=self.post(self.request(completion_only=True,garment_template=template))
+        self.assertEqual([j['sheet'] for j in jobs],['costume'])
+        self.matrix.request.assert_called_once()
+        self.assertIn('10,10,30,30',self.matrix.request.call_args.args[1]['input']['prompt'])
+
+    def test_invalid_template_is_rejected_before_provider_or_reference_publication(self):
+        reference=Mock(return_value=self.reference)
+        with self.assertRaises(UserError):self.post(self.request(garment_template={'type':'invented'}),reference)
+        reference.assert_not_called();self.matrix.request.assert_not_called()
+
     def test_profile_character_request_matches_plan_and_is_one_mocked_generation(self):
         description='Stocky blue warrior, true profile facing LEFT, one near-side shoulder patch'
         item=generation_plan({'mode':'character','prompt':description})['items'][0]
@@ -519,7 +545,7 @@ class PartPromptRequestTests(unittest.TestCase):
         self.assertEqual(job['parts'], item['parts'])
         self.assertEqual((job['columns'], job['rows']), (4, 2))
         self.assertTrue(job['requires_reviewed_layout'])
-        self.assertEqual(job['prompt_version'], 'animation-parts-v21')
+        self.assertEqual(job['prompt_version'], 'animation-parts-v23')
         self.assertEqual(job['instructions'], notes)
         self.assertEqual(self.persisted(job), job)
 

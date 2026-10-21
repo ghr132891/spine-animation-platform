@@ -364,10 +364,10 @@ class Matrix:
             raise UserError('任务记录中的生图模型不受支持')
         return self.request('/models/'+model+'/'+urllib.parse.quote(gen_id,safe='')+'/status')
 
-    def generate_part_sheet(self,sheet,reference_url,instructions='',facing='right',include_back=True,body_layout='separate'):
+    def generate_part_sheet(self,sheet,reference_url,instructions='',facing='right',include_back=True,body_layout='separate',garment_type=None):
         from .part_prompts import part_prompt,sheet_spec
         spec=sheet_spec(sheet,include_back,body_layout);reference_url=self.reference_url(reference_url)
-        result=self.request('/models/'+DEFAULT_MODEL+'/generate',{'input':{'prompt':part_prompt(sheet,instructions,facing,include_back,body_layout),'aspect_ratio':spec['ratio'],'resolution':'1K','quality':'high','output_format':'png','background':'opaque','input_images':[reference_url]},'request_num':1})
+        result=self.request('/models/'+DEFAULT_MODEL+'/generate',{'input':{'prompt':part_prompt(sheet,instructions,facing,include_back,body_layout,garment_type),'aspect_ratio':spec['ratio'],'resolution':'1K','quality':'high','output_format':'png','background':'opaque','input_images':[reference_url]},'request_num':1})
         return self.generation_id(result)
 
     def download_result(self, url,timeout=60):

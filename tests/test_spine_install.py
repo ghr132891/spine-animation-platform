@@ -49,7 +49,7 @@ class InstallationTests(unittest.TestCase):
         api=json.loads((ROOT/'agent/openapi.json').read_text())
         with patch.object(installer.Bridge,'call',return_value={'characters':[],'capabilities':['codex-image-preflight','matrix-gpt-image-2.5-flare','matrix-reference-cache','server-reference-upload','runtime-motion-diagnostics','reviewed-part-layout','continuous-limb-mesh','pixel-contact-diagnostics','smooth-gait-curves','character-asset-sheet-first','side-walk-preparation','joint-reviewed-assembly','neck-seam-closeups','scoped-texture-repair','turnaround-reference-review','multi-region-closeups','scoped-material-finish','contrast-material-review','asset-integrity-review','costume-completion','strict-layer-anchors','durable-task-resume','garment-occlusion-review','isolated-limb-preview','runtime-preview-cache','parallel-runtime-sampling','platform-review-bundle','scoped-edge-cleanup']}),patch.object(installer.Bridge,'api',return_value=api):
             result=installer.probe('http://server.test:8780','private-test-token')
-        self.assertEqual(result['platform_version'],'1.10.0');self.assertTrue(result['authenticated'])
+        self.assertEqual(result['platform_version'],(ROOT/'VERSION').read_text().strip());self.assertTrue(result['authenticated'])
 
     def test_precheck_rejects_server_missing_layout_and_motion_capabilities(self):
         api=json.loads((ROOT/'agent/openapi.json').read_text())

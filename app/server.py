@@ -15,6 +15,7 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
+from app.version import BUILD
 from app.core import Project, UserError, decode_files, png_bytes, safe_name, MAX_BYTES,atomic_json,read_image,straight
 from app.provider import Matrix,DEFAULT_MODEL,failure_details,ProviderError
 from app.image_provider import ImageProvider
@@ -177,16 +178,20 @@ class Handler(BaseHTTPRequestHandler):
             if parts==['api','automation','agent','sources']:
                 return self.send({'access':{'requires_token':AGENT_TASKS.require_token,'mode':'token' if AGENT_TASKS.require_token else 'open'},'projects':AGENT_TASKS.api('/api/projects'),'rigs':AGENT_TASKS.api('/api/rigs'),'characters':AGENT_TASKS.api('/api/characters'),
                                   'capabilities':['texture-reskin','rig-operations','same-runtime-animation-replacement','mapped-local-bone-curves','character-walk','runtime-validation','runtime-motion-diagnostics','reviewed-part-layout','continuous-limb-mesh','pixel-sole-contact','continuous-limb-prompts','pixel-contact-diagnostics','smooth-gait-curves','simple-result-view','concise-art-prompts','safe-generation-failures','character-asset-sheet-first','side-walk-preparation','joint-reviewed-assembly','polygon-part-crops','neck-seam-closeups','scoped-texture-repair','scoped-material-finish','contrast-material-review','long-hem-secondary-motion','turnaround-reference-review','multi-region-closeups','asset-integrity-review','costume-completion','strict-layer-anchors','garment-occlusion-review','isolated-limb-preview','runtime-preview-cache','parallel-runtime-sampling','platform-review-bundle','scoped-edge-cleanup','per-side-orientation-review','natural-walk-posture','durable-task-resume','runtime-sample-cache','grouped-workflow-history','sampled-motion-vision','motion-preview-4-32','gait-phase-diagnostics','rig-supplemental-parts','codex-image-preflight','matrix-reference-view-preparation','matrix-gpt-image-2.5-flare','matrix-reference-cache','server-reference-upload','temporary-reference-tunnel','configurable-image-provider','openai-images-api','reviewed-occlusion-overlay','assembly-source-snapshot'],
-                                  'assembly_execution':{'version':'assembly-execution-v2','default_on_complete_import':True,'action':'prepare-assembly','reuse_complete_sources':True,'automatic_source_anchors':True,'preserve_unrelated_repairs':True,'atomic_import_and_repair':True,'integrated_backpack_review':True,'prebind_overlays_exported':True},'canvas_layers':{'contract':'canvas-layers-v1','coordinate_system':'source-pixels-y-down','actions':['partition-canvas','install-canvas-layers','reconstruction','review-reconstruction'],'visible_pixels_protected':True,'formal_build_requires_review':True,'complete_silhouette_field':'completed_image','overlap_allowed':True,'spread_review':'layer-overlap'},'image_generation':{'model':MATRIX.status()['model'],'provider':MATRIX.status().get('provider','matrix'),'reference_transport':MATRIX.status()['reference_transport'],'prompt_version':PROMPT_VERSION,'prompt_style':'concise-positive-artwork','default_preparation':'asset-sheet','generation_budget':{'additional_default':8,'baseline':{'turnaround':1,'character-assets':1},'zero_forbids_all':True},'preparation_contract':'side-parts-v2','walk_camera':'side-or-three-quarter-side','part_review_required':True,'integrity_contract':'asset-integrity-v1','garment_review':{'contract':'garment-occlusion-v1','scope':'generated-long-costume','walk_leg_frames':32,'idle_leg_frames':8,'isolated_is_diagnostic_only':True},'costume_completion_sheet':'costume','missing_layer_anchor':'reject','numeric_checks_certify_visual_quality':False,'seam_review':{'contract':'neck-seam-v1','frames_per_animation':8,'requires_visual_review':True,'scoped_pixel_repair':True,'material_finish':True,'contrast_backgrounds':['light','dark']},'connection_review':{'contract':'assembly-connections-v3','walk_head_frames':32,'anchors':['head','__hip__','__back__'],'walk_hip_frames':32,'walk_back_frames':32,'requires_visual_review':True},'detail_review':{'contract':'articulation-v1','anchors':['head','torso','l-upper-arm','r-upper-arm','l-upper-leg','r-upper-leg','__hair__'],'frames_per_animation_per_anchor':8},'turnaround':{'contract':'three-view-v1','sheet':'turnaround','views':['front','side','back'],'reference_only':True,'shares_generation_budget':True},'asset_sheet':{'sheet':'character-assets','requires_reviewed_layout':True,'source_layout_reuse':True},'failure_policy':{'review_rejection':'stop','unknown_submission':'verify-existing','query_or_download_error':'retry-same-task','visual_quality':'one-budgeted-revision'}},
+                                  'garment_templates':{'version':'garment-template-v1','types':['trousers','shorts','skirt','split-robe','armor'],'action':'garment-template','automatic_fit_on_import':True,'directional_completion':True},'assembly_execution':{'version':'assembly-execution-v2','default_on_complete_import':True,'action':'prepare-assembly','reuse_complete_sources':True,'automatic_source_anchors':True,'preserve_unrelated_repairs':True,'atomic_import_and_repair':True,'integrated_backpack_review':True,'prebind_overlays_exported':True,'preserve_order_on_guide_save':True,'resolve_overlay_constraints':True,'persistent_prebind_evidence':True,'automatic_task_material_preparation':True,'web_material_progress':True,'complete_generation_defaults':True,'edge_evidence':'edge-evidence-v1','material_animation_handoff':True,'automatic_build_after_assessment':True,'content_bound_animation_transition':True,'late_generated_materials_auto_bind':True,'durable_dynamic_review_queue':True,'runtime_stress_before_build':True,'preserved_assets_keep_detail_review':True},'canvas_layers':{'contract':'canvas-layers-v1','coordinate_system':'source-pixels-y-down','actions':['partition-canvas','install-canvas-layers','reconstruction','review-reconstruction'],'visible_pixels_protected':True,'formal_build_requires_review':True,'complete_silhouette_field':'completed_image','overlap_allowed':True,'spread_review':'layer-overlap'},'image_generation':{'model':MATRIX.status()['model'],'provider':MATRIX.status().get('provider','matrix'),'reference_transport':MATRIX.status()['reference_transport'],'prompt_version':PROMPT_VERSION,'prompt_style':'concise-positive-artwork','default_preparation':'asset-sheet','generation_budget':{'additional_default':8,'baseline':{'turnaround':1,'character-assets':1},'zero_forbids_all':True},'preparation_contract':'side-parts-v2','walk_camera':'side-or-three-quarter-side','part_review_required':True,'integrity_contract':'asset-integrity-v1','garment_review':{'contract':'garment-occlusion-v1','scope':'generated-long-costume','walk_leg_frames':32,'idle_leg_frames':8,'isolated_is_diagnostic_only':True},'costume_completion_sheet':'costume','missing_layer_anchor':'reject','numeric_checks_certify_visual_quality':False,'seam_review':{'contract':'neck-seam-v1','frames_per_animation':8,'requires_visual_review':True,'scoped_pixel_repair':True,'material_finish':True,'contrast_backgrounds':['light','dark']},'connection_review':{'contract':'assembly-connections-v3','walk_head_frames':32,'anchors':['head','__hip__','__back__'],'walk_hip_frames':32,'walk_back_frames':32,'requires_visual_review':True},'detail_review':{'contract':'articulation-v1','anchors':['head','torso','l-upper-arm','r-upper-arm','l-upper-leg','r-upper-leg','__hair__'],'frames_per_animation_per_anchor':8},'turnaround':{'contract':'three-view-v1','sheet':'turnaround','views':['front','side','back'],'reference_only':True,'shares_generation_budget':True},'asset_sheet':{'sheet':'character-assets','requires_reviewed_layout':True,'source_layout_reuse':True},'failure_policy':{'review_rejection':'stop','unknown_submission':'verify-existing','query_or_download_error':'retry-same-task','visual_quality':'one-budgeted-revision'}},
                                   'production_reference':REFERENCE_PROFILE,
                                   'ui':{'create':'/auto.html?new=1','result':'/result.html?rig={id}','editor':'/rig.html?rig={id}&advanced=1'},
                                   'reference_upload':MATRIX.reference_status(),
                                   'limitations':['不支持任意骨架自动重定向或二进制 SKEL 骨骼编辑','多帧视觉检查不保证所有帧或所有皮肤的美术质量']})
+            if len(parts)==6 and parts[:4]==['api','automation','agent','tasks'] and parts[5]=='retry-stage':
+                from app.stages import retry_stage
+                return self.send(retry_stage(AGENT_TASKS,parts[4],data.get('stage')))
             if parts==['api','automation','agent','tasks']:
                 return self.send([AGENT_TASKS.summary(p.parent.name) for p in sorted(AGENT_TASKS.tasks.glob('*/task.json'),key=lambda p:p.stat().st_mtime,reverse=True)])
             if len(parts)==5 and parts[3]=='tasks':return self.send(AGENT_TASKS.summary(parts[4]))
             if len(parts)==6 and parts[3]=='tasks' and parts[5]=='download':return self.send(AGENT_TASKS.download(parts[4]),mime='application/zip',filename='spine-agent-'+parts[4]+'.zip')
             return self.send({'error':'未找到 Agent 接口'},404)
+        if path=='/api/version':return self.send(BUILD)
         if path=='/api/health':return self.send({'ok':True,'app':'spine-reskin'})
         if len(parts)>=3 and parts[:2]==['api','parts-lab']:
             if len(parts)==3:return self.send(PARTS_LAB.status(parts[2]))
@@ -219,7 +224,19 @@ class Handler(BaseHTTPRequestHandler):
                 if action=='cutout':return self.send(png_bytes(c.cutout()),mime='image/png')
                 if action=='review':return self.send(c.review())
                 if action=='prebind':return self.send(c.prebind_evidence()[0])
-                if action in ('prebind-parts','prebind-assembly','prebind-spread'):return self.send(png_bytes(c.prebind_evidence()[1][action.removeprefix('prebind-')]),mime='image/png')
+                if action=='edge-review':return self.send(c.edge_evidence()[0])
+                if action=='edge-review-image':return self.send(png_bytes(c.edge_evidence()[1]),mime='image/png')
+                if action=='stress-image':
+                    from app.assembly_stress import panel
+                    return self.send(panel(c,qs.get('panel',[''])[0],qs.get('digest',[None])[0])[2],mime='image/png')
+                if action in ('prebind-parts','prebind-assembly','prebind-spread'):
+                    from app.image_evidence import select
+                    options={'resolution':'original'}
+                    for key in ('pose','zoom','crop'):
+                        if key in qs:
+                            try:options[key]=json.loads(qs[key][0])
+                            except ValueError:raise UserError('检查图参数无效')
+                    return self.send(png_bytes(select(c.prebind_evidence()[1][action.removeprefix('prebind-')],options,action)[0]),mime='image/png')
                 if action=='layer-overlap':return self.send(c.layer_overlap()[0])
                 if action=='layer-overlap-image':return self.send(png_bytes(c.layer_overlap()[1]),mime='image/png')
                 if action=='reconstruction':return self.send(c.reconstruction()[0])
@@ -375,6 +392,9 @@ class Handler(BaseHTTPRequestHandler):
         if parts[:2]==['api','workflows']:return self.workflow(parts,data=data)
         if parts[:3]==['api','automation','agent']:
             if not AGENT_TASKS.authorized(self.headers.get('Authorization')):return self.send({'error':'Agent 接口需要 Bearer 访问令牌'},401)
+            if len(parts)==6 and parts[:4]==['api','automation','agent','tasks'] and parts[5]=='retry-stage':
+                from app.stages import retry_stage
+                return self.send(retry_stage(AGENT_TASKS,parts[4],data.get('stage')))
             if parts==['api','automation','agent','tasks']:return self.send(AGENT_TASKS.create(data),202)
             if parts==['api','automation','agent','batch']:return self.send(AGENT_TASKS.batch(data),202)
             if parts==['api','automation','agent','refine']:return self.send(AGENT_TASKS.refine(data),202)
@@ -400,7 +420,7 @@ class Handler(BaseHTTPRequestHandler):
             if parts[5]=='resume':return self.send(AUTOMATION.resume(parts[4],data))
             return self.send({'error':'未找到自动换皮操作'},404)
         if parts==['api','characters','create']:
-            c=CharacterProject.create(STORAGE,data.get('name',''));CHARACTERS[c.id]=c
+            c=CharacterProject.create(STORAGE,data.get('name',''));m=dict(c.meta);m['stress_contract']='runtime-assembly-stress-v1';c.save(m);CHARACTERS[c.id]=c
             return self.send(c.summary())
         if len(parts)==4 and parts[:2]==['api','characters']:
             c=get_character(parts[2]);action=parts[3]
@@ -411,9 +431,22 @@ class Handler(BaseHTTPRequestHandler):
                     elif data.get('action','register')=='register':MATRIX.register_reference(c.image(),data.get('url',''))
                     else:raise UserError('参考图操作无效')
                     return self.send(character_reference_info(c))
+            if action=='stress-test':
+                from app.assembly_stress import prepare
+                return self.send(prepare(AGENT_TASKS,c))
             if action=='generation-plan':
-                with c.lock:return self.send({**generation_plan(data,c.meta['settings']['facing']),'model':MATRIX.status()['model'],'reference_transport':MATRIX.status()['reference_transport']})
+                with c.lock:
+                    from app.garment_templates import generation_request
+                    prepared,template=generation_request(c,data) if data.get('mode')=='complete-parts' else (data,None)
+                    return self.send({**generation_plan(prepared,c.meta['settings']['facing']),'garment_template':template,'model':MATRIX.status()['model'],'reference_transport':MATRIX.status()['reference_transport']})
             if action=='generate-parts':
+                from app.part_prompts import complete_generation_request
+                if data.get('sheets') is None:
+                    saved=[json.loads(p.read_text()) for p in (c.directory/'jobs').glob('*.json')]
+                    saved=[j for j in saved if j.get('generation_nonce')==data.get('nonce') and j.get('sheet')]
+                    if saved and all(j['sheet'] in ('body','arms','legs') for j in saved):data={**data,'sheets':['body','arms','legs'],'body_layout':data.get('body_layout',saved[0].get('body_layout','separate'))}
+                from app.garment_templates import generation_request
+                data,template=generation_request(c,data)
                 nonce=str(data.get('nonce',''))
                 if not re.fullmatch('[a-f0-9-]{16,48}',nonce):raise UserError('生成任务编号无效')
                 sheets=selected_sheets(data.get('sheets'))
@@ -422,17 +455,19 @@ class Handler(BaseHTTPRequestHandler):
                 # Validate every requested layout/note before publishing a
                 # reference or reserving any paid generation.
                 specs={s:sheet_spec(s,include_back,body_layout) for s in sheets}
-                notes={s:part_instructions(data,s) for s in sheets}
-                prompts={s:part_prompt(s,notes[s],c.meta['settings']['facing'],include_back,body_layout) for s in sheets}
+                notes=data.get('_garment_notes') or {s:part_instructions(data,s) for s in sheets}
+                prompts={s:part_prompt(s,notes[s],c.meta['settings']['facing'],include_back,body_layout,template['type'] if template else None) for s in sheets}
                 existing=[CHARACTER_JOBS.path(c.id,uuid.uuid5(uuid.NAMESPACE_URL,'spine-part:'+nonce+':'+sheet).hex) for sheet in sheets]
                 saved=[json.loads(path.read_text()) for path in existing if path.exists()]
                 if len(saved)==len(existing) or any(job.get('status')=='submission_unknown' or job.get('failure',{}).get('stop_generation') for job in saved):
                     return self.send(saved)
                 with c.lock:
                     c.check(data['revision']);image_id=c.meta['image_id'];facing=c.meta['settings']['facing']
+                    if template:
+                        meta=dict(c.meta);meta['garment_template']=template;c.save(meta)
                     if 'character-assets' in sheets and c.meta.get('prebind_contract')!='complete-assets-v1':
                         meta=dict(c.meta);meta['prebind_contract']='complete-assets-v1';c.save(meta)
-                    prompts={s:part_prompt(s,notes[s],facing,include_back,body_layout) for s in sheets}
+                    prompts={s:part_prompt(s,notes[s],facing,include_back,body_layout,template['type'] if template else None) for s in sheets}
                     reference_url=character_reference(c,data.get('reference_url'))
                 sheets=selected_sheets(data.get('sheets'))
                 result=[]
@@ -444,8 +479,8 @@ class Handler(BaseHTTPRequestHandler):
                     path=CHARACTER_JOBS.path(c.id,job_id);path.parent.mkdir(exist_ok=True)
                     with c.lock:
                         if path.exists():result.append(json.loads(path.read_text()));continue
-                        job={'id':job_id,'generation_nonce':nonce,'status':'submission_unknown','model':MATRIX.status()['model'],'provider':MATRIX.status().get('provider','matrix'),'created_at':time.time(),'prompt':prompts[sheet],'prompt_version':PROMPT_VERSION,'instructions':instructions,'include_back':include_back,'mode':'complete-parts','sheet':sheet,'reference_only':spec.get('reference_only',False),'body_layout':body_layout,'groups':spec.get('groups',{}),'parts':spec['parts'],'columns':spec['columns'],'rows':spec['rows'],'requires_reviewed_layout':spec.get('requires_reviewed_layout',False),'source_image_id':image_id};atomic_json(path,job)
-                    try:gen_id=MATRIX.generate_part_sheet(sheet,reference_url,instructions,facing,include_back,body_layout)
+                        job={'id':job_id,'generation_nonce':nonce,'status':'submission_unknown','model':MATRIX.status()['model'],'provider':MATRIX.status().get('provider','matrix'),'created_at':time.time(),'prompt':prompts[sheet],'prompt_version':PROMPT_VERSION,'instructions':instructions,'garment_template':template,'include_back':include_back,'mode':'complete-parts','sheet':sheet,'reference_only':spec.get('reference_only',False),'body_layout':body_layout,'groups':spec.get('groups',{}),'parts':spec['parts'],'columns':spec['columns'],'rows':spec['rows'],'requires_reviewed_layout':spec.get('requires_reviewed_layout',False),'source_image_id':image_id};atomic_json(path,job)
+                    try:gen_id=MATRIX.generate_part_sheet(sheet,reference_url,instructions,facing,include_back,body_layout,template['type'] if template else None)
                     except UserError as e:
                         record_submission_failure(job,e);atomic_json(path,job);result.append(job)
                         # A review rejection or ambiguous POST must not trigger
@@ -496,22 +531,37 @@ class Handler(BaseHTTPRequestHandler):
                 elif action=='apply-source-layout':result=c.apply_source_layout(data)
                 elif action=='reset-part':result=c.reset_part(data)
                 elif action=='prebind':return self.send(c.prebind_evidence()[0])
+                elif action=='edge-review':return self.send(c.edge_evidence()[0])
                 elif action=='finish-parts':result=c.finish_parts(data)
+                elif action=='repair-connections':
+                    from app.repair_pipeline import repair
+                    result=repair(c,data)
+                elif action=='review-stress':
+                    from app.assembly_stress import review
+                    result=review(c,data)
                 elif action=='review-prebind':result=c.review_prebind(data)
                 elif action=='layer-overlap':return self.send(c.layer_overlap()[0])
                 elif action=='review-overlap':result=c.review_overlap(data)
                 elif action=='reconstruction':return self.send(c.reconstruction()[0])
                 elif action=='partition-canvas':result=c.partition_canvas(data)
                 elif action=='install-canvas-layers':result=c.install_canvas_layers(data)
+                elif action=='garment-template':result=c.garment_template(data)
                 elif action=='prepare-assembly':result=c.prepare_assembly(data)
                 elif action=='review-reconstruction':result=c.review_reconstruction(data)
                 elif action=='install-source-layers':result=c.install_source_layers(data)
                 elif action=='guide':result=c.update(data)
                 elif action=='review':result=c.update_review(data)
-                elif action=='build':result=c.build(STORAGE,data)
+                elif action=='build':
+                    from app.assembly_stress import require as require_stress
+                    require_stress(c)
+                    result=c.build(STORAGE,data)
                 elif action=='restore':result=c.restore(data)
                 elif action=='foot-layers':result=c.foot_layers(STORAGE,data)
                 else:raise UserError('未知单图操作')
+            from app.generation_flow import MATERIAL_ACTIONS
+            if action in MATERIAL_ACTIONS:
+                from app.animation_transition import notify
+                notify(AGENT_TASKS,c)
             return self.send(result)
         if parts==['api','rigs','create']:
             source=get_project(data['source_id'])
@@ -607,7 +657,15 @@ class Handler(BaseHTTPRequestHandler):
         if route==['refine'] and data is not None:return self.send(WEB_WORKFLOWS.refine(session,data),202)
         if len(route)>=2 and route[0]=='tasks':
             t=AGENT_TASKS.read(route[1]);WEB_WORKFLOWS.allowed(session,t)
+            if len(route)==3 and route[2]=='retry-stage' and data is not None:
+                from app.stages import retry_stage
+                retry_stage(AGENT_TASKS,route[1],data.get('stage'))
+                return self.send(WEB_WORKFLOWS.read(session,route[1]))
+            if len(route)==6 and route[2]=='materials' and data is None:
+                from app.generation_flow import panel
+                return self.send(panel(AGENT_TASKS,t,route[3],route[4],route[5]),mime='image/png')
             if len(route)==2 and data is None:return self.send(WEB_WORKFLOWS.read(session,route[1]))
+            if len(route)==3 and route[2]=='animate-materials' and data is not None:return self.send(WEB_WORKFLOWS.animate_materials(session,route[1],data),202)
             if len(route)==3 and route[2]=='delivery' and data is not None:return self.send(WEB_WORKFLOWS.register_delivery(session,route[1],data))
             if len(route)==3 and route[2]=='resume' and data is not None:return self.send(WEB_WORKFLOWS.resume(session,route[1],data))
             if len(route)==3 and route[2]=='cancel' and data is not None:return self.send(WEB_WORKFLOWS.public(AGENT_TASKS.cancel(route[1])))
@@ -629,6 +687,9 @@ if __name__=='__main__':
     threading.Thread(target=CHARACTER_JOBS.run,daemon=True).start()
     threading.Thread(target=AUTOMATION.run,daemon=True).start()
     threading.Thread(target=AGENT_TASKS.run,daemon=True).start()
+    from app.animation_transition import run as run_animation_transitions,run_reviews as run_animation_reviews
+    threading.Thread(target=run_animation_transitions,args=(AGENT_TASKS,),daemon=True).start()
+    threading.Thread(target=run_animation_reviews,args=(AGENT_TASKS,),daemon=True).start()
     print(f'Spine 换皮工具监听 {args.host}:{args.port}',flush=True)
     print(f'本机访问 http://127.0.0.1:{args.port}/；局域网访问 http://本机局域网IP:{args.port}/',flush=True)
     import signal

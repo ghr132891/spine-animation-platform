@@ -24,13 +24,15 @@ class TurnaroundTests(unittest.TestCase):
         self.review();c=self.f.character();self.assertEqual(require_review(self.tasks.read(self.id),c,'reference')['job_id'],self.job)
         with open(c.directory/'jobs'/(self.job+'.png'),'ab') as file:file.write(b'changed')
         with self.assertRaises(UserError):require_review(self.tasks.read(self.id),c,'reference')
-    def test_assembly_requires_current_view_and_revision(self):
+    def test_assembly_requires_current_view_and_content(self):
         self.look();self.review()
         with self.assertRaises(UserError):self.review(phase='assembly')
         c=self.f.character();c.apply_source_layout({'revision':c.meta['revision'],'parts':self.f.layout})
         self.f.look('assembly');self.review(phase='assembly');c=self.f.character()
         require_review(self.tasks.read(self.id),c,'assembly')
         c.update({'revision':c.meta['revision'],'landmarks':c.meta['landmarks'],'settings':c.meta['settings']})
+        require_review(self.tasks.read(self.id),c,'assembly') # unchanged metadata-only revision
+        c.update({'revision':c.meta['revision'],'landmarks':c.meta['landmarks'],'settings':{**c.meta['settings'],'stride':.31}})
         with self.assertRaises(UserError):require_review(self.tasks.read(self.id),c,'assembly')
         require_review(self.tasks.read(self.id),c,'reference')
     def test_build_preserves_current_assembly_review_but_rejects_changed_parameters(self):

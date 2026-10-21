@@ -493,8 +493,13 @@ class CharacterProject:
         if data['landmarks']!=meta['landmarks'] and meta.get('assembly_inputs'):
             meta['part_layers'].update(copy.deepcopy(meta.pop('assembly_inputs')))
         meta['landmarks']=checked_landmarks(data['landmarks']);meta['settings']=checked_settings(data['settings']);meta['masks']=checked_masks(data.get('masks',self.meta.get('masks',{})))
-        names=[n for n,_,_ in segments(meta['landmarks'])];review=meta.get('part_review',{});order=review.get('draw_order',[])
-        meta['part_review']={'adjustments':{n:r for n,r in review.get('adjustments',{}).items() if n in names},'draw_order':[n for n in DRAW_ORDER if n in names] if set(order)!=set(names) else order,**({'shoe_cuffs':True} if review.get('shoe_cuffs') else {})}
+        names={n for n,_,_ in segments(meta['landmarks'])}
+        layers=meta.get('part_layers',{})
+        names-={n for r in layers.values() for n in r.get('coverage',[])}
+        names.update(layers)
+        names.update(r['name'] for r in meta.get('assembly_overlays',[]))
+        review=meta.get('part_review',{});order=self.review_order(names)
+        meta['part_review']={'adjustments':{n:r for n,r in review.get('adjustments',{}).items() if n in names},'draw_order':order,**({'shoe_cuffs':True} if review.get('shoe_cuffs') else {})}
         self.save(meta)
         from .assembly_pipeline import canonicalize
         canonicalize(self)
@@ -503,13 +508,13 @@ class CharacterProject:
         return self.summary()
 
     def parts(self):
-        image=self.image() if self.asset_status()['ready'] else self.cutout();key=json.dumps([self.meta['landmarks'],self.meta.get('masks',{}),self.meta.get('part_layers',{}),self.meta.get('part_review',{}),self.meta.get('assembly_overlays',[])],sort_keys=True)
+        image=self.image() if self.asset_status()['ready'] else self.cutout();key=json.dumps([self.meta['image_id'],self.meta['settings'],self.meta['landmarks'],self.meta.get('masks',{}),self.meta.get('part_layers',{}),self.meta.get('part_review',{}),self.meta.get('assembly_overlays',[])],sort_keys=True)
         if self.cache.get('parts_key')!=key:
             self.cache['parts']=self.layered_parts(image,self.meta['landmarks'],self.meta.get('masks',{}));self.cache['parts_key']=key
         return self.cache['parts']
 
     def base_parts(self):
-        image=self.image() if self.asset_status()['ready'] else self.cutout();key=json.dumps([self.meta['landmarks'],self.meta.get('masks',{}),self.meta.get('part_layers',{}),self.meta.get('assembly_overlays',[])],sort_keys=True)
+        image=self.image() if self.asset_status()['ready'] else self.cutout();key=json.dumps([self.meta['image_id'],self.meta['settings'],self.meta['landmarks'],self.meta.get('masks',{}),self.meta.get('part_layers',{}),self.meta.get('assembly_overlays',[])],sort_keys=True)
         if self.cache.get('base_parts_key')!=key:
             self.cache['base_parts']=self.layered_parts(image,self.meta['landmarks'],self.meta.get('masks',{}),adjust=False);self.cache['base_parts_key']=key
         return self.cache['base_parts']
@@ -558,17 +563,34 @@ class CharacterProject:
         order=order if set(order)==base and len(order)==len(base) else [n for n in fallback if n in base]
         return overlay_order(order,items)
 
+    def garment_template(self,data):
+        from .garment_templates import contract,plan
+        self.check(data['revision'])
+        if data.get('template') is not None:
+            meta=copy.deepcopy(self.meta);meta['garment_template']=contract(self,data['template'])
+            for key in ('prebind_review','overlap_review','reconstruction_review'):meta.pop(key,None)
+            self.save(meta)
+        return {**self.summary(),'garment_plan':plan(self)}
+
     @atomic_assembly
     def prepare_assembly(self,data):
         """Execute shared-canvas registration and reviewed foreground extraction."""
         from .assembly_pipeline import canonicalize,validate_overlays,replace_from_sources
         self.check(data['revision'])
+        if 'garment_template' in data:
+            from .garment_templates import contract
+            meta=copy.deepcopy(self.meta);meta['garment_template']=contract(self,data['garment_template']);self.save(meta)
         if data.get('replacements'):replace_from_sources(self,data['replacements'])
         canonicalize(self)
         if not self.asset_status()['ready']:raise UserError('先补齐独立部件，不能用可见碎片替代补全')
+        if data.get('connections'):
+            from .connection_fit import apply
+            apply(self,data['connections'])
         meta=copy.deepcopy(self.meta)
         parts=self.layered_parts(self.image(),meta['landmarks'],meta.get('masks',{}),adjust=False,overlays=False)
         meta['assembly_overlays']=validate_overlays(parts,data.get('overlays',meta.get('assembly_overlays',[])))
+        from .assembly_pipeline import overlay_order
+        overlay_order([p['name'] for p in parts],meta['assembly_overlays'])
         if 'back_accessory_part' in data:
             name=data['back_accessory_part']
             if name is not None and (name not in ('torso','back') or name not in meta['part_layers']):raise UserError('背包归属须为实际完整部件')
@@ -616,6 +638,7 @@ class CharacterProject:
             item.update({k:spec[item['name']][k] for k in ('chain','pins','group','complete') if k in spec[item['name']]})
         return self.install_canvas_layers({'revision':data['revision'],'layers':layers,'draw_order':data['draw_order']})
 
+    @atomic_assembly
     def install_canvas_layers(self,data):
         from .canvas_layers import ownership, placement
         self.check(data['revision']);items=data.get('layers')
@@ -688,8 +711,12 @@ class CharacterProject:
         self.save(meta);return self.summary()
 
     def prebind_evidence(self):
-        from .prebind import inspect
-        return inspect(self)
+        from .prebind import cached_evidence
+        return cached_evidence(self)
+
+    def edge_evidence(self):
+        from .edge_review import prepare
+        return prepare(self)
 
     def review_prebind(self,data):
         from .prebind import validate_review
@@ -785,8 +812,9 @@ class CharacterProject:
 
     def asset_status(self):
         """Structural completeness only; actual assembly still needs visual review."""
+        landmarks=self.meta.get('landmarks') or {}
         required={'head','torso','pelvis',*[s+'-'+p for s in ('l','r') for p in ('upper-arm','lower-arm','hand','upper-leg','lower-leg','foot')]}
-        if 'back' in self.meta['landmarks']:required.add('back')
+        if 'back' in landmarks:required.add('back')
         covered=set();chains=set()
         for name,record in self.meta.get('part_layers',{}).items():
             digest=record.get('image_id','')
@@ -796,7 +824,7 @@ class CharacterProject:
             if record.get('chain') in ('arm','leg'):chains.add(name)
         expected={s+'-upper-'+p for s in ('l','r') for p in ('arm','leg')}
         missing=sorted(required-covered);missing_chains=sorted(expected-chains)
-        unbound=sorted(set(self.meta.get('part_layers',{}))-{n for n,_,_ in segments(self.meta['landmarks'])})
+        unbound=sorted(set(self.meta.get('part_layers',{}))-{n for n,_,_ in segments(landmarks)})
         return {'ready':not missing and not missing_chains and not unbound,'missing_parts':missing,'missing_chains':missing_chains,'unbound_parts':unbound,
                 'requires_visual_review':True}
 
@@ -909,6 +937,9 @@ class CharacterProject:
             if landmarks!=checked_landmarks(self.meta['landmarks']) or settings!=checked_settings(self.meta['settings']) or masks!=checked_masks(self.meta.get('masks',{})):raise UserError('先保存当前定位与设置，再重新验收三项素材图')
             from .prebind import require
             require(self.prebind_evidence()[0],self.meta.get('prebind_review'))
+        if self.meta.get('stress_contract'):
+            from .assembly_stress import require as require_stress
+            require_stress(self)
         review=checked_review({'adjustments':self.meta.get('part_review',{}).get('adjustments',{}),'draw_order':self.review_order([p['name'] for p in parts])},[p['name'] for p in parts],im.size,DRAW_ORDER)
         if self.meta.get('part_review',{}).get('shoe_cuffs'):review['shoe_cuffs']=True
         skeleton=make_skeleton(im,landmarks,parts,settings,masks,review['draw_order'])

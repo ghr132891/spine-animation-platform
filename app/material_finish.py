@@ -1,4 +1,4 @@
-"""Explicitly scoped alpha finishing; no inferred garment masks or RGB repainting."""
+"""Scoped alpha finishing and opt-in edge color decontamination."""
 import math
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
@@ -21,8 +21,36 @@ def scalar(value, lo, hi, label):
     return float(value)
 
 
+def decontaminate_edge(rgb,alpha,selected,op):
+    """Replace confirmed bright matte spill using nearby interior RGB only.
+
+    Alpha/opaque artwork and sole contact geometry are never changed. This is
+    an explicit local operation, not automatic whitening removal on clothes.
+    """
+    if not str(op.get('reference_note','')).strip():raise UserError('边缘去色须记录实际污染与保留材质的依据')
+    radius=op.get('radius',3)
+    if type(radius)!=int or not 1<=radius<=4:raise UserError('边缘取色半径须为1–4像素')
+    threshold=scalar(op.get('min_lift',18),8,80,'边缘亮度差')
+    strength=scalar(op.get('strength',1),.05,1,'边缘去色强度')
+    a=Image.fromarray(np.rint(alpha).astype('uint8'))
+    exterior=np.asarray(Image.fromarray(((alpha==0)*255).astype('uint8')).filter(ImageFilter.MaxFilter(2*radius+1)))>0
+    seeds=(alpha>=240)&(np.asarray(a.filter(ImageFilter.MinFilter(3)))>=128)
+    eligible=(alpha>0)&(alpha<255)&exterior&(selected>0)
+    found=np.zeros(alpha.shape,dtype=bool);sample=rgb.astype(float).copy();h,w=alpha.shape
+    for dy,dx in sorted(((y,x) for y in range(-radius,radius+1) for x in range(-radius,radius+1) if x or y),key=lambda v:v[0]**2+v[1]**2):
+        if dx*dx+dy*dy>radius*radius:continue
+        y0,y1=max(0,-dy),min(h,h-dy);x0,x1=max(0,-dx),min(w,w-dx)
+        target=(slice(y0,y1),slice(x0,x1));source=(slice(y0+dy,y1+dy),slice(x0+dx,x1+dx))
+        use=eligible[target]&~found[target]&seeds[source]
+        sample[target][use]=rgb[source][use];found[target][use]=True
+    delta=rgb.astype(float)-sample
+    spill=eligible&found&(delta.mean(2)>=threshold)&(delta.min(2)>=-5)
+    weight=(selected*strength*spill)[:,:,None]
+    return np.rint(rgb*(1-weight)+sample*weight).clip(0,255).astype('uint8')
+
+
 def finish_material(image, data):
-    """Preserve canvas/RGB/rig. All masks and material decisions come from review."""
+    """Preserve canvas/rig. RGB changes require explicit edge decontamination."""
     reason=data.get('reason')
     if not isinstance(reason,str) or not reason.strip():raise UserError('材质修整须记录实图检查原因')
     ops=data.get('operations')
@@ -33,6 +61,27 @@ def finish_material(image, data):
         if not isinstance(op,dict):raise UserError('材质操作须为对象')
         selected=coverage(image.size,op.get('polygon'))
         kind=op.get('kind')
+        if kind=='copy-pixel-color':
+            points=op.get('points')
+            if not str(op.get('reference_note','')).strip() or not isinstance(points,list) or not 1<=len(points)<=16:
+                raise UserError('局部取色须提供1–16个明确像素和实图依据')
+            region=polygon_mask(image.size,[op.get('polygon')]);seen=set()
+            for point in points:
+                if not isinstance(point,dict):raise UserError('取色像素格式无效')
+                target=point.get('target');source=point.get('source');expected=point.get('expected_rgba')
+                for xy in (target,source):
+                    if not isinstance(xy,list) or len(xy)!=2 or any(type(v)!=int for v in xy) or not (0<=xy[0]<image.width and 0<=xy[1]<image.height):raise UserError('取色坐标须为贴图内整数像素')
+                x,y=target;sx,sy=source
+                if (x,y) in seen or not region[y,x] or not 0<(x-sx)**2+(y-sy)**2<=16 or alpha[sy,sx]<128:
+                    raise UserError('取色须在确认范围内，来源为4像素内的真实可见图面')
+                actual=[*map(int,result[y,x,:3]),int(round(alpha[y,x]))]
+                if not isinstance(expected,list) or len(expected)!=4 or any(type(v)!=int or not 0<=v<=255 for v in expected) or expected!=actual:
+                    raise UserError('待修像素已变化，请重新查看实图')
+                seen.add((x,y));result[y,x,:3]=result[sy,sx,:3]
+            history.append(dict(op));continue
+        if kind=='edge-decontaminate':
+            result[:,:,:3]=decontaminate_edge(result[:,:,:3],alpha,selected,op)
+            history.append(dict(op));continue
         if kind=='erase':target=np.zeros_like(alpha)
         elif kind=='remove-specks':
             limit=scalar(op.get('max_pixels',4),1,32,'残点面积')
@@ -71,8 +120,8 @@ def finish_material(image, data):
         alpha=alpha*(1-selected)+target*selected
         history.append(dict(op))
     result[:,:,3]=np.rint(alpha).clip(0,255).astype('uint8')
-    changed=result[:,:,3]!=original[:,:,3]
-    return Image.fromarray(result),{'reason':reason.strip()[:1000],'operations':history,'changed_pixels':int(changed.sum()),'rgb_preserved':True,'canvas_preserved':True,'alpha_before':alpha_summary(original),'alpha_after':alpha_summary(result)}
+    changed=np.any(result!=original,axis=2);rgb_changed=np.any(result[:,:,:3]!=original[:,:,:3],axis=2)
+    return Image.fromarray(result),{'reason':reason.strip()[:1000],'operations':history,'changed_pixels':int(changed.sum()),'rgb_changed_pixels':int(rgb_changed.sum()),'rgb_preserved':not bool(rgb_changed.any()),'canvas_preserved':True,'alpha_before':alpha_summary(original),'alpha_after':alpha_summary(result)}
 
 
 def alpha_summary(array):

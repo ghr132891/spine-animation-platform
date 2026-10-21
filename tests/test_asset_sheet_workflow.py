@@ -64,6 +64,8 @@ def accept_fixture_prebind(character):
     character.review_prebind({'revision':character.meta['revision'],'digest':report['digest'],
         'checks':dict.fromkeys(report['checks'],True),'verdict':'ready',
         'reason':'Synthetic fixture: complete separate limbs and overlapping joints.'})
+    from tests.stress_fixture import accept_synthetic_stress
+    accept_synthetic_stress(character)
 
 
 class AssetSheetWorkflowTests(unittest.TestCase):
@@ -344,6 +346,8 @@ class AssetSheetWorkflowTests(unittest.TestCase):
             c=self.character();report=c.prebind_evidence()[0]
             # Fixture shapes have been inspected; actual worker views are enforced separately.
             c.review_prebind({'revision':c.meta['revision'],'digest':report['digest'],'checks':dict.fromkeys(report['checks'],True),'verdict':'ready','reason':'Synthetic complete fixture overlaps at shoulders and hips.'})
+            from tests.stress_fixture import accept_synthetic_stress
+            accept_synthetic_stress(c)
             self.look()
             self.look('assembly')
             self.assess(parts_reviewed=True)

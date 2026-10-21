@@ -48,23 +48,58 @@ function showArtifact(index){
 }
 $('artifact').onchange=()=>showArtifact(+$('artifact').value);
 function friendlyStage(task){
+ if(task.state==='completed'&&task.output_scope==='materials')return '素材修复完成';
+ if(task.state!=='completed'&&terminal.has(task.state)&&(task.material_preparation||[]).some(s=>s.panels?.length)&&!task.delivery_status)return '素材已生成 · 后续未完成';
  if(task.delivery_status==='previous')return terminal.has(task.state)?'修改未完成 · 旧版可看':'修改中 · 旧版可看';
  if(task.delivery_status==='draft')return terminal.has(task.state)?'已有交付 · 验收见说明':'修复中 · 草稿可看';
  const completed={waiting_reference:'等待参考图恢复',queued:'排队等待',completed:'制作完成',failed:'本次未完成',cancelled:'已停止',interrupted:'处理已中断'};
  return completed[task.state]||['准备图片','准备角色','制作动作','检查效果'][task.step]||'正在制作';
 }
+let materialSignature='';
+function renderMaterials(task){
+ const stages=task.material_preparation||[],signature=JSON.stringify([stages,task.material_delivery]);
+ $('material-progress').hidden=!stages.length;
+ if(signature===materialSignature)return;materialSignature=signature;
+ const container=$('material-stages');container.replaceChildren();
+ for(const stage of stages){
+  const section=document.createElement('div'),message=document.createElement('p');
+  message.textContent=stage.message;section.append(message);
+  const status=document.createElement('p');status.className='small';
+  status.textContent=({needs_source_image:'等待角色原图',needs_complete_parts:'等待补齐素材',needs_repair:'待修复',reviewed:'已有素材验收记录',awaiting_visual_review:'已生成，等待图面验收'})[stage.status]||'准备中';section.append(status);
+  const addPanels=(record,parent)=>{const grid=document.createElement('div');grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px';
+   for(const panel of record.panels||[]){const link=document.createElement('a'),label=document.createElement('p'),image=document.createElement('img');
+    link.href=panel.url;link.target='_blank';link.rel='noopener';label.textContent=({parts:'完整部件',assembly:'试拼',spread:'双向摆开',edges:'边缘放大检查'})[panel.name];
+    if(panel.name==='spread'){const poses=document.createElement('p');for(let i=0;i<5;i++){const a=document.createElement('a');a.href='/api/characters/'+stage.character_id+'/prebind-spread?pose='+i;a.target='_blank';a.textContent='姿态'+(i+1)+'原图 ';poses.append(a)}parent.append(poses)}image.src=panel.url;image.alt=label.textContent;image.loading='lazy';image.style.cssText='width:100%;max-height:260px;object-fit:contain;background:#e4ebf2';link.append(label,image);grid.append(link)}parent.append(grid)};
+  addPanels(stage,section);
+  if(stage.history?.length){const history=document.createElement('details'),summary=document.createElement('summary');summary.textContent='查看之前的素材版本';history.append(summary);for(const prior of stage.history)addPanels(prior,history);section.append(history)}
+  container.append(section);
+ }
+ if(task.state==='completed'&&task.output_scope==='materials'&&task.material_delivery?.characters?.length===1){
+  const button=document.createElement('button');button.type='button';button.className='primary';button.textContent='用此素材生成待机和行走';
+  button.onclick=async()=>{button.disabled=true;const key='animate-materials-'+task.id;let nonce=store.get(key);if(!nonce){nonce=uuid();store.set(key,nonce)}
+   try{const next=await api('tasks/'+task.id+'/animate-materials',{nonce});render(next);startPoll();await historyList();notice('已复用验收素材开始制作，旧版保留，不重新生图。')}
+   catch(error){notice(error.message,true);button.disabled=false}};
+  container.append(button);
+ }
+ if(task.material_delivery?.download_url){const download=document.createElement('a');download.href=task.material_delivery.download_url;download.textContent='下载修复素材与验收图';download.className='primary button-link';container.append(download)}
+}
 function render(task){
+ renderMaterials(task);
  const sameTask=state.active?.id===task.id,selected=sameTask?Number($('artifact').value)||0:0;
  const draft=!!task.delivery_status,hasResult=(task.artifacts||[]).length>0&&(task.state==='completed'||draft);
+ const hasMaterials=(task.material_preparation||[]).some(s=>s.panels?.length);
+ $('result-empty').parentElement.hidden=!hasResult&&hasMaterials;
+ const timings=$('stage-timings');timings.replaceChildren();for(const s of task.stage_timings||[]){const p=document.createElement('p');p.textContent=s.name+' · '+s.status+' · 最近 '+(s.duration_seconds??'…')+'秒 / 累计 '+(s.total_seconds||0).toFixed(1)+'秒 · '+s.attempts+'次'+(s.cache_hits?' · 缓存命中'+s.cache_hits+'次':'');timings.append(p);if(s.status==='failed'&&['stress-test','dynamic-review','bind','material-preparation'].includes(s.name)){const b=document.createElement('button');b.className='secondary';b.textContent='仅重试此阶段';b.onclick=async()=>{b.disabled=true;try{render(await api('tasks/'+task.id+'/retry-stage',{stage:s.name}));startPoll()}catch(e){notice(e.message,true)}finally{b.disabled=false}};timings.append(b)}}
+ const transitionBox=$('animation-transition');transitionBox.replaceChildren();const transitions=task.animation_transitions||[];transitionBox.hidden=!transitions.length;for(const t of transitions){const p=document.createElement('p');p.textContent=t.message+(t.error?'：'+t.error:'')+(t.phase==='review_ready'?'（'+t.panel_count+'张复检图，尚未判定美术合格）':'');transitionBox.append(p);if(t.stress_panels?.length){const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='查看正式绑定前的骨骼压力测试（全身、腰胯、肩带）';details.append(summary);for(const panel of t.stress_panels){const a=document.createElement('a'),im=document.createElement('img');a.href=panel.url;a.target='_blank';a.rel='noopener';im.src=panel.url;im.loading='lazy';im.alt=panel.animation+' · '+(panel.anchor||'全身');im.style.cssText='width:100%;max-height:320px;object-fit:contain';a.append(im);details.append(a)}transitionBox.append(details)}}
  state.active=task;store.set('last-task',task.id);$('progress').hidden=false;$('stage').textContent=friendlyStage(task);$('stage-detail').textContent=task.stage;
  $('current-request').hidden=!task.current_request;$('current-request').textContent=task.current_request?'本次修改：'+task.current_request:'';
  $('process-link').hidden=!task.process_url;if(task.process_url)$('process-link').href=task.process_url;
  const budget=task.generation_budget||{};if(budget.limit!=null)$('stage-detail').textContent+=' · 基础图 '+(budget.baseline_used_or_reserved||0)+'/'+(budget.baseline_limit||0)+'，补图／修订 '+(budget.used_or_reserved||0)+'/'+budget.limit;
  $('resume').hidden=!['failed','interrupted'].includes(task.state);
  $('attempt-details').hidden=!(task.attempt_count>1);$('attempt-list').replaceChildren();for(const attempt of task.attempts||[]){const li=document.createElement('li');li.textContent=new Date(attempt.created_at*1000).toLocaleString('zh-CN')+' · '+friendlyStage(attempt)+(attempt.error?'：'+attempt.error:'');$('attempt-list').append(li)}
- $('result-title').textContent=task.delivery_status==='previous'?'上次保存的版本':draft?'最新交付 · 查看验收说明':task.state==='completed'?'制作完成':'看效果';$('cancel').hidden=terminal.has(task.state);
+ $('result-title').textContent=task.delivery_status==='previous'?'上次保存的版本':draft?'最新交付 · 查看验收说明':task.state==='completed'?(task.output_scope==='materials'?'素材修复完成':'制作完成'):'看效果';$('cancel').hidden=terminal.has(task.state);
  for(const [i,item]of [...$('steps').children].entries()){item.classList.toggle('done',task.state==='completed'||i<task.step);item.classList.toggle('current',!terminal.has(task.state)&&i===task.step)}
- $('result-message').textContent=(task.state==='waiting_reference'?'参考图通道暂不可用，平台会自动检测并继续原任务，无需重新生成。'+(task.reference_recovery?.last_error?.error?.message?' 原因：'+task.reference_recovery.last_error.error.message:''):null)||(draft?task.delivery_summary:null)||task.error||(task.state==='completed'?'动画已准备好。看看效果，也可以让 Codex 继续调整。':task.state==='cancelled'?'制作已停止，可以调整需求后重新开始。':'正在后台处理，完成后会显示动画。');
+ $('result-message').textContent=(task.state==='waiting_reference'?'参考图通道暂不可用，平台会自动检测并继续原任务，无需重新生成。'+(task.reference_recovery?.last_error?.error?.message?' 原因：'+task.reference_recovery.last_error.error.message:''):null)||(draft?task.delivery_summary:null)||task.error||(task.state==='completed'?(task.output_scope==='materials'?'素材修复与三项验收已完成，可查看下方结果并下载素材包。':'动画已准备好。看看效果，也可以让 Codex 继续调整。'):task.state==='cancelled'?'制作已停止，可以调整需求后重新开始。':(task.output_scope==='materials'?'正在复检修复后的素材，完成后可下载素材包。':'正在后台处理，完成后会显示动画。'));
  $('process-detail').hidden=terminal.has(task.state);$('result-description').hidden=!(task.summary||draft&&task.error);$('result-summary').textContent=draft&&task.error?'原自动任务未通过：'+task.error:task.summary||'';$('results').hidden=!hasResult;
  $('refine-form').hidden=!hasResult;$('refine-submit').disabled=state.refining||!terminal.has(task.state);
  if(!state.refining)$('refine-status').textContent=!terminal.has(task.state)?'正在处理，当前草稿仍可查看。':'';
@@ -80,8 +115,10 @@ function render(task){
  busy(state.busy);
 }
 async function historyList(){if(!state.connected)return;const tasks=await api('tasks');$('history-list').replaceChildren();$('history-empty').hidden=tasks.length>0;$('history-count').textContent=tasks.length?'（'+tasks.length+'）':'';for(const task of tasks){const row=document.createElement('button');row.type='button';row.className='history-row';if(task.image_url){const img=document.createElement('img');img.src=task.image_url;img.alt='角色原图';row.append(img)}else{const box=document.createElement('span');box.className='history-placeholder';row.append(box)}const text=document.createElement('span');text.className='history-text';const title=document.createElement('strong');title.textContent=task.requirements;const date=document.createElement('span');date.textContent=new Date(task.created_at*1000).toLocaleString('zh-CN')+(task.delivery_updated_at?' · 草稿更新 '+new Date(task.delivery_updated_at*1000).toLocaleString('zh-CN'):'')+(task.attempt_count>1?' · 内部处理 '+task.attempt_count+' 次':'');text.append(title,date);const status=document.createElement('span');status.className='history-state '+(task.delivery_status==='draft'?'draft':task.state);status.textContent=friendlyStage(task);row.append(text,status);row.onclick=()=>{render(task);startPoll()};$('history-list').append(row)}return tasks}
-async function poll(){if(!state.connected||!state.active||terminal.has(state.active.state))return;try{const task=await api('tasks/'+state.active.id);render(task);if(terminal.has(task.state)){clearInterval(state.poll);state.poll=null;await historyList()}}catch(error){notice(error.message,true)}}
-function startPoll(){clearInterval(state.poll);state.poll=null;if(state.active&&!terminal.has(state.active.state))state.poll=setInterval(poll,4000)}
+function platformPending(task){return task?.state!=='cancelled'&&(task?.animation_transitions||[]).some(t=>['stress_pending','binding','draft_pending','review_pending','review_preparing'].includes(t.phase)||(t.phase==='retryable_error'&&t.error_step==='binding_or_delivery'&&t.retry_count<3))}
+function shouldPoll(task){return task&&(!terminal.has(task.state)||platformPending(task))}
+async function poll(){if(!state.connected||!shouldPoll(state.active))return;try{const task=await api('tasks/'+state.active.id);render(task);if(!shouldPoll(task)){clearInterval(state.poll);state.poll=null;await historyList()}}catch(error){notice(error.message,true)}}
+function startPoll(){clearInterval(state.poll);state.poll=null;if(shouldPoll(state.active))state.poll=setInterval(poll,4000)}
 $('refresh').onclick=async()=>{try{await historyList();if(state.active)render(await api('tasks/'+state.active.id));startPoll();notice('')}catch(error){notice(error.message,true)}};
 $('cancel').onclick=async()=>{if(!state.active)return;try{render(await api('tasks/'+state.active.id+'/cancel',{}));startPoll();await historyList()}catch(error){notice(error.message,true)}};
 $('request-form').onsubmit=async event=>{event.preventDefault();if(state.busy||state.active&&!terminal.has(state.active.state))return;let accepted=false;try{const requirements=$('requirements').value.trim();if(requirements.length<5)throw Error('请描述希望制作的动作');const payload={mode:state.mode,requirements,image_preparation:state.mode==='image'&&!$('prepare-image').checked?'preserve':'asset-sheet'};if(state.mode==='image'){if(state.character)payload.character_id=state.character;else if(state.image)payload.image=state.image;else throw Error('请先上传一张角色图片')}const signature=fingerprint(payload);let saved=null;try{saved=JSON.parse(store.get('pending'))}catch{}const nonce=state.pending?.signature===signature?state.pending.nonce:saved?.signature===signature?saved.nonce:uuid();state.pending={signature,nonce};store.set('pending',JSON.stringify(state.pending));busy(true);notice('');const task=await api('tasks',{...payload,nonce});accepted=true;state.pending=null;store.set('pending','');render(task);startPoll();await historyList()}catch(error){notice(error.message,true)}finally{busy(false);if(accepted)$('request-form').setAttribute('data-submitted','true')}};

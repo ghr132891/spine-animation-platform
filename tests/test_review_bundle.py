@@ -32,11 +32,13 @@ class ReviewBundleTests(unittest.TestCase):
   a=object.__new__(AgentTasks)
   with self.assertRaises(UserError):a.record_closeup_review({},dict(kind='rig',id='id',animation='walk',verdict='ready',reason='x'),'digest',{})
  def test_batch_reviews_atomic_on_invalid_entry(self):
-  a=object.__new__(AgentTasks);a.tool_lock=threading.RLock();s=FakeSource();a.loaders={'rig':lambda id:s}
+  a=object.__new__(AgentTasks);a.tool_lock=threading.RLock();a.lock=threading.RLock();
+  from app.task_locks import TaskLocks
+  a.task_locks=TaskLocks();s=FakeSource();a.loaders={'rig':lambda id:s}
   from app.agent_tasks import resource_digest
   digest=resource_digest(s.export());a.own=lambda *args:None
   task={'state':'running','calls':0,'closeup_checks':{'rig:id':{'sha256':digest,'regions':{'idle':{'head':{'report':{'frames':8}}}}}}}
-  saved=[];a.read=lambda id:copy.deepcopy(task);a.save_tool_state=lambda t:saved.append(copy.deepcopy(t))
+  saved=[];a.read=lambda id:copy.deepcopy(task);a.save_tool_state=lambda t:saved.append(copy.deepcopy(t));a.update=lambda id,**kw:task.update(kw)
   entries=[{'animation':'idle','anchor':'head','verdict':'ready','reason':'viewed'},{'animation':'walk','anchor':'head','verdict':'ready','reason':'not viewed'}]
   with self.assertRaises(UserError):a.tool('task','spine_review_regions',{'kind':'rig','id':'id','reviews':entries})
   self.assertTrue(all('review' not in t['closeup_checks']['rig:id']['regions']['idle']['head'] for t in saved))

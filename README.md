@@ -1,6 +1,6 @@
 # Spine AI 动画工作台
 
-当前发布：**1.11.1**。[本版遮挡修复与GitHub研究](docs/GITHUB_OCCLUSION_RESEARCH.md) · [1.11能力与升级说明](docs/RELEASE_1.11.0.md)。网页页脚显示实际运行版本和提交号；更新代码后须重启服务。
+当前发布：**1.11.2**。[本版遮挡修复与GitHub研究](docs/GITHUB_OCCLUSION_RESEARCH.md) · [1.11能力与升级说明](docs/RELEASE_1.11.0.md)。网页页脚显示实际运行版本和提交号；更新代码后须重启服务。
 
 上传角色图片，输入动作要求，生成可预览、可下载的 Spine 动画；生成后可直接用文字继续修改。
 

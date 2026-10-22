@@ -1,6 +1,6 @@
 {
   "name": "spine-animation-skill-mcp",
-  "version": "1.11.1",
+  "version": "1.11.2",
   "python": ">=3.9",
   "platforms": [
     "macOS",
@@ -31,15 +31,15 @@
   "contains_credentials": false,
   "files": {
     "安装说明.txt": {
-      "sha256": "d1fa7f5786fc4f63a6247d9e83d35b8e2963bfc7a59e43dd9df913a84c3d4aa9",
+      "sha256": "1e597de09dd786d499f8b8fd6fc08b5b58b303c98b0649d286d4204b59941dac",
       "bytes": 7927
     },
     "给Codex的安装指令.txt": {
-      "sha256": "b0d5a39b458fcc15970a02778329f5ef07b840ef4ea0522d76d5f4e00cdd59f3",
+      "sha256": "675847c6066d1027b9b009c8959f3356a9cef7f3c4f70bac40074b871eaf3930",
       "bytes": 1684
     },
     "管理员交付说明.txt": {
-      "sha256": "eef77ff72971cc85303a572641fee7296d229e88615e2582759aa707ab5060d5",
+      "sha256": "4ea5b85c3aa189ad4fc92089231f85c4b6a4086c260b82a79faafab800f1cdd2",
       "bytes": 3755
     },
     "安装.command": {
@@ -55,8 +55,8 @@
       "bytes": 40
     },
     "spine-animation/SKILL.md": {
-      "sha256": "360d9a7879acdd2c8c8b2b2f8b3c2c3ac2410c67d7848af019ccc85bc8d4981f",
-      "bytes": 16186
+      "sha256": "8dd5e09a0a3a9e29e298015ae3c564851484f8b7eb79e01379bf269f6fb2de6f",
+      "bytes": 16330
     },
     "spine-animation/agents/openai.yaml": {
       "sha256": "a6cf35ef3dba1b18f235d8dabca505060ff1fdc88e4db7cf28a799808d3c7ee9",
@@ -83,8 +83,8 @@
       "bytes": 3351
     },
     "spine-animation/references/assembly-execution.md": {
-      "sha256": "56d776ccaad19b9a48391251dd4c0b24965d61e48307ca24f12b87bc4ed7b81e",
-      "bytes": 19256
+      "sha256": "425435a13e7585eb73e5dcbdac98e74e0c80bd4903eb1f652ee91d53c409d988",
+      "bytes": 20266
     },
     "spine-animation/references/parts-comparison.md": {
       "sha256": "5b97aa438697cdf528c0e141db2d20ba54694bee3965ac9e28add53554562fa7",
@@ -107,7 +107,7 @@
       "bytes": 3267
     },
     "spine-animation/scripts/spine_mcp.py": {
-      "sha256": "9114666874b66309fd7dc3d97823183d95ee3f9d6146519b3a650d207340113f",
+      "sha256": "92eab360bb046126a3393dad7ad8efaef5d9248bc29f49f5d46278600a16c46c",
       "bytes": 42518
     },
     "spine-animation/scripts/spine_workflow.py": {
@@ -115,5 +115,5 @@
       "bytes": 7867
     }
   },
-  "minimum_server_version": "1.11.1"
+  "minimum_server_version": "1.11.2"
 }

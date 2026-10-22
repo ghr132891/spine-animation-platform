@@ -64,6 +64,7 @@ function renderMaterials(task){
  for(const stage of stages){
   const section=document.createElement('div'),message=document.createElement('p');
   message.textContent=stage.message;section.append(message);
+  if(stage.accessory_preparation?.candidates?.length){const note=document.createElement('p');note.textContent='配件遮挡检查：'+stage.accessory_preparation.candidates.map(c=>c.name+'（'+(c.status==='approved_repair'?'已确认修法，可自动复用':'需核实是否为重复前景')+'）').join('、');section.append(note)}
   const status=document.createElement('p');status.className='small';
   status.textContent=({needs_source_image:'等待角色原图',needs_complete_parts:'等待补齐素材',needs_repair:'待修复',reviewed:'已有素材验收记录',awaiting_visual_review:'已生成，等待图面验收'})[stage.status]||'准备中';section.append(status);
   const addPanels=(record,parent)=>{const grid=document.createElement('div');grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px';

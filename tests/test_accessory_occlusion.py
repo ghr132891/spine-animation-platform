@@ -19,3 +19,40 @@ class AccessoryOcclusionTests(unittest.TestCase):
    self.assertEqual(before,(c.directory/'character.json').read_bytes())
  def test_new_overlay_cannot_reintroduce_duplicate_in_same_transaction(self):
   with self.assertRaises(UserError):self.c.prepare_assembly({'revision':self.c.meta['revision'],'accessory_occlusion':[self.rule()],'overlays':[]})
+ def test_default_prepare_removes_only_previously_confirmed_same_foreground(self):
+  c=self.c;overlay=copy.deepcopy(c.meta['assembly_overlays']);before=copy.deepcopy(c.meta['part_layers'])
+  c.prepare_assembly({'revision':c.meta['revision'],'accessory_occlusion':[self.rule()]})
+  self.assertEqual(len(c.meta['accessory_occlusion_rules']),1)
+  c.prepare_assembly({'revision':c.meta['revision'],'overlays':overlay})
+  self.assertEqual(c.meta['assembly_overlays'],[]);self.assertEqual(c.meta['part_layers'],before);self.assertEqual(c.meta['accessory_preparation']['automatically_repaired'],['strap'])
+  history=len(c.meta['accessory_auto_repairs']);c.prepare_assembly({'revision':c.meta['revision']});self.assertEqual(len(c.meta['accessory_auto_repairs']),history)
+ def test_new_polygon_is_reported_and_not_deleted(self):
+  c=self.c;overlay=copy.deepcopy(c.meta['assembly_overlays']);c.prepare_assembly({'revision':c.meta['revision'],'accessory_occlusion':[self.rule()]})
+  overlay[0]['polygon']=[[0,0],[.8,0],[.8,1],[0,1]]
+  c.prepare_assembly({'revision':c.meta['revision'],'overlays':overlay})
+  self.assertEqual(c.meta['assembly_overlays'],overlay);self.assertEqual(c.meta['accessory_preparation']['status'],'needs_visual_review')
+ def test_changed_arm_pixels_do_not_reuse_old_approval(self):
+  from app.core import read_image
+  c=self.c;overlay=copy.deepcopy(c.meta['assembly_overlays']);c.prepare_assembly({'revision':c.meta['revision'],'accessory_occlusion':[self.rule()]})
+  m=copy.deepcopy(c.meta);r=m['part_layers']['l-upper-arm'];folder=c.directory/'part-images';im=read_image((folder/(r['image_id']+'.png')).read_bytes());im.putpixel((3,3),(30,40,50,255));blob=png_bytes(im);r['image_id']=sha(blob);(folder/(r['image_id']+'.png')).write_bytes(blob);c.save(m)
+  c.prepare_assembly({'revision':c.meta['revision'],'overlays':overlay})
+  self.assertEqual(c.meta['assembly_overlays'],overlay);self.assertEqual(c.meta['accessory_preparation']['status'],'needs_visual_review')
+ def test_complete_import_executes_saved_rule_without_manual_repair(self):
+  from tests.test_asset_sheet_workflow import asset_fixture
+  c=self.c;overlay=copy.deepcopy(c.meta['assembly_overlays']);c.prepare_assembly({'revision':c.meta['revision'],'accessory_occlusion':[self.rule()]})
+  m=copy.deepcopy(c.meta);m['assembly_overlays']=overlay;c.save(m)
+  im,layout=asset_fixture();c.apply_source_layout({'revision':c.meta['revision'],'parts':[x for x in layout if x['name']=='head']})
+  self.assertEqual(c.meta['assembly_overlays'],[]);self.assertEqual(c.meta['accessory_preparation']['automatically_repaired'],['strap'])
+ def test_task_start_preparation_repairs_reintroduced_overlay_without_model(self):
+  import uuid
+  from pathlib import Path
+  from app.agent_tasks import AgentTasks
+  from app.character import CharacterProject
+  from app.generation_flow import prepare
+  c=self.c;overlay=copy.deepcopy(c.meta['assembly_overlays']);c.prepare_assembly({'revision':c.meta['revision'],'accessory_occlusion':[self.rule()]})
+  m=copy.deepcopy(c.meta);m['assembly_overlays']=overlay;c.save(m)
+  storage=c.directory.parent.parent;agent=AgentTasks(storage,Path(__file__).resolve().parents[1],{'character':lambda id:CharacterProject(storage/'characters'/id)},None)
+  t=agent.create({'nonce':uuid.uuid4().hex,'requirements':'复用已确认配件归属的完整素材继续检查','max_generations':0,'image_preparation':'preserve','sources':[{'kind':'character','id':c.id}]})
+  cid=t['sources'][0]['id'];record=prepare(agent,t['id'],cid);result=agent.loaders['character'](cid)
+  self.assertEqual(result.meta['assembly_overlays'],[]);self.assertEqual(record['accessory_preparation']['status'],'no_duplicate_foreground');self.assertEqual(agent.read(t['id'])['calls'],0)
+  self.assertEqual(c.meta['assembly_overlays'],overlay) # source remains untouched

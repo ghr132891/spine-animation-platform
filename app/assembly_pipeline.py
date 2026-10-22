@@ -33,6 +33,8 @@ def atomic_assembly(method):
                 if method.__name__=='_apply_reviewed_layout' or data.get('apply_template') or 'garment_template' in data:
                     from .garment_templates import execute
                     execute(staged)
+                from .accessory_occlusion import execute as execute_accessory
+                execute_accessory(staged)
                 parts=staged.parts()
                 staged.review_order([p['name'] for p in parts])
                 report,_=staged.prebind_evidence()

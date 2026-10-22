@@ -33,8 +33,11 @@ def prepare(agent,task_id,entity):
                 record.update(status='needs_complete_parts',asset_status=status,panels=[],
                               message='尚缺完整部件，保留现有素材；先补齐后再自动装配。')
             else:
-                if character.meta.get('canvas_contract')!='canvas-layers-v1':
+                from .accessory_occlusion import inspect as inspect_accessory
+                accessory=inspect_accessory(character)
+                if character.meta.get('canvas_contract')!='canvas-layers-v1' or accessory['approved_repairs']:
                     character.prepare_assembly({'revision':character.meta['revision']})
+                record['accessory_preparation']=inspect_accessory(character)
                 report,images=character.prebind_evidence();digest=report['digest']
                 edges,edge_image=character.edge_evidence()
                 images={**images,'edges':edge_image}

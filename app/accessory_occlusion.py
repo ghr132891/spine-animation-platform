@@ -22,6 +22,9 @@ def apply(character,items):
    selected=next((o for o in overlays if o['name']==name),None)
    if not selected or selected.get('source')!=source or selected.get('subject')!=near:raise UserError('不能移除不属于当前衣装和近臂关系的遮挡层')
    seen.add(name);overlays.remove(selected)
+   rule={'basis':source_basis(character,parts,source,near),'overlay_signature':overlay_signature(selected),'source':source,'near_part':near,'name':name,'reason':item['reason']}
+   rules=meta.setdefault('accessory_occlusion_rules',[])
+   if not any(r['basis']==rule['basis'] and r['overlay_signature']==rule['overlay_signature'] for r in rules):rules.append(rule)
   order=character.review_order(list(parts)+[o['name'] for o in meta.get('assembly_overlays',[])])
   if order.index(source)>order.index(near):raise UserError('先按实际前后关系把主体放在近侧手臂后方')
   records.append({**copy.deepcopy(item),'effect':'source-texture-retained;near-arm-occludes-fixed-accessory','removed_overlays':names})
@@ -29,3 +32,43 @@ def apply(character,items):
  for name in ('prebind_review','stress_review','overlap_review','reconstruction_review'):meta.pop(name,None)
  character.save(meta)
  return records
+
+
+def overlay_signature(item):
+ import json
+ return sha(json.dumps({k:item.get(k) for k in ('name','source','subject','source_sha256','polygon')},sort_keys=True).encode())
+
+
+def source_basis(character,parts,source,near):
+ import json
+ return sha(json.dumps({'image_id':character.meta['image_id'],'landmarks':character.meta['landmarks'],
+  'parts':[(n,sha(png_bytes(parts[n]['image'])),parts[n]['box']) for n in (source,near)]},sort_keys=True).encode())
+
+
+def inspect(character):
+ """Detect risky duplicate structure, never infer accessory semantics from name."""
+ parts={p['name']:p for p in character.base_parts()};rules=character.meta.get('accessory_occlusion_rules',[]);candidates=[]
+ for item in character.meta.get('assembly_overlays',[]):
+  source=item['source'];near=item['subject']
+  if source!='torso' or near not in ('l-upper-arm','r-upper-arm') or source not in parts or near not in parts or parts[source].get('group')!='costume':continue
+  signature=overlay_signature(item);basis=source_basis(character,parts,source,near)
+  approved=any(r.get('basis')==basis and r.get('overlay_signature')==signature for r in rules)
+  candidates.append({'name':item['name'],'source':source,'near_part':near,'source_sha256':sha(png_bytes(parts[source]['image'])),
+   'overlay_signature':signature,'basis':basis,'status':'approved_repair' if approved else 'needs_visual_review',
+   'reason':'主衣装图面重复置于近臂前方；先核实固定配件归属，不按名称自动删除'})
+ return {'version':'accessory-ownership-default-v1','candidates':candidates,'approved_repairs':[c['name'] for c in candidates if c['status']=='approved_repair'],
+  'status':'repair_pending' if any(c['status']=='approved_repair' for c in candidates) else 'needs_visual_review' if candidates else 'no_duplicate_foreground'}
+
+
+def execute(character):
+ """Shared default hook for imports, assembly and reused task preparation."""
+ report=inspect(character);approved=set(report['approved_repairs'])
+ if approved:
+  meta=copy.deepcopy(character.meta);meta['assembly_overlays']=[x for x in meta.get('assembly_overlays',[]) if x['name'] not in approved]
+  meta.setdefault('accessory_auto_repairs',[]).append({'removed':sorted(approved),'evidence':[x for x in report['candidates'] if x['name'] in approved]})
+  for name in ('prebind_review','stress_review','overlap_review','reconstruction_review'):meta.pop(name,None)
+  character.save(meta)
+  report=inspect(character);report['automatically_repaired']=sorted(approved)
+ if character.meta.get('accessory_preparation')!=report:
+  meta=copy.deepcopy(character.meta);meta['accessory_preparation']=report;character.save(meta)
+ return report
